@@ -1,0 +1,102 @@
+/**
+ * Catalogue de permissions et de roles — DOIT rester synchronise avec
+ * supabase/migrations/20260813100011_seed_rbac_catalogue.sql (source de
+ * verite cote base). Un test d'integration (tests/integration/rbac-catalogue.test.ts)
+ * verifie cette synchronisation a chaque execution — voir docs/roadmap.md,
+ * risque "permissions codees en double".
+ */
+
+export const PERMISSION_CODES = [
+  'employee.create',
+  'employee.update',
+  'employee.view',
+  'employee.view_salary',
+  'employee.terminate',
+  'contract.manage',
+  'leave.request',
+  'leave.approve',
+  'attendance.manage',
+  'recruitment.manage',
+  'expense.create',
+  'expense.approve',
+  'expense.pay',
+  'expense.cancel',
+  'expense.view',
+  'supplier.manage',
+  'budget.manage',
+  'budget.view',
+  'budget.transfer',
+  'accounting.post',
+  'accounting.reverse',
+  'accounting.close_period',
+  'accounting.view',
+  'treasury.manage',
+  'treasury.reconcile',
+  'papej.view',
+  'papej.manage',
+  'papej.report',
+  'donation.view',
+  'donation.create',
+  'donation.update',
+  'donation.approve',
+  'donation.allocate',
+  'donation.close',
+  'donation.report',
+  'grant.view',
+  'grant.manage',
+  'restricted_fund.manage',
+  'loan.manage',
+  'loan.view',
+  'invoice.manage',
+  'payment.record',
+  'subscription.manage',
+  'customer.manage',
+  'asset.manage',
+  'asset.view',
+  'payroll.prepare',
+  'payroll.approve',
+  'payroll.pay',
+  'payroll.view_all',
+  'payroll.view_own',
+  'advance.request',
+  'advance.approve',
+  'crm.manage',
+  'crm.view_own',
+  'crm.view_all',
+  'commission.manage',
+  'document.upload',
+  'document.view_confidential',
+  'audit.view',
+  'user.manage',
+  'role.manage',
+  'permission.override',
+  'settings.manage',
+] as const
+
+export type PermissionCode = (typeof PERMISSION_CODES)[number]
+
+export const ROLE_CODES = [
+  'SUPER_ADMIN',
+  'DIRECTEUR_GENERAL',
+  'DIRECTEUR_TECHNIQUE',
+  'COMPTABLE',
+  'RH',
+  'MANAGER',
+  'AGENT_TERRAIN',
+  'SUPPORT',
+  'EMPLOYE',
+] as const
+
+export type RoleCode = (typeof ROLE_CODES)[number]
+
+export const ROLE_LABELS: Record<RoleCode, string> = {
+  SUPER_ADMIN: 'Super administrateur',
+  DIRECTEUR_GENERAL: 'Directeur General',
+  DIRECTEUR_TECHNIQUE: 'Directeur Technique',
+  COMPTABLE: 'Comptable',
+  RH: 'Ressources Humaines',
+  MANAGER: 'Manager',
+  AGENT_TERRAIN: 'Agent terrain',
+  SUPPORT: 'Support',
+  EMPLOYE: 'Employe',
+}
