@@ -50,7 +50,8 @@ Règles explicites du prompt maître appliquées strictement :
   = auth.uid()` en plus du filtre organisation).
 - `SUPPORT` : aucun accès comptabilité/finance.
 - `COMPTABLE` : ne peut pas gérer les rôles/permissions (`role.manage` réservé
-  `SUPER_ADMIN`/`DIRECTEUR_GENERAL`).
+  `SUPER_ADMIN`/`DIRECTEUR_GENERAL`). `DIRECTEUR_TECHNIQUE` dispose de
+  `user.manage` (comptes techniques uniquement) mais pas de `role.manage`.
 
 ## 3. Séparation des fonctions (SoD)
 

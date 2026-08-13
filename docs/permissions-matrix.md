@@ -103,7 +103,8 @@ Route Handlers) **et** répliquées en RLS via `has_permission()` — voir `secu
 | commission.manage | ● | ● | ○ | ○ | ○ | ○ | ○ | ○ | ○ |
 | document.view_confidential | ● | ● | ○ | ●(finance) | ●(RH) | ○ | ○ | ○ | ○ |
 | audit.view | ● | ● | ●(technique) | ○ | ○ | ○ | ○ | ○ | ○ |
-| user.manage / role.manage | ● | ○ | ●(technique) | ○ | ○ | ○ | ○ | ○ | ○ |
+| user.manage | ● | ● | ●(comptes techniques) | ○ | ○ | ○ | ○ | ○ | ○ |
+| role.manage | ● | ● | ○ | ○ | ○ | ○ | ○ | ○ | ○ |
 | settings.manage | ● | ● | ●(technique) | ○ | ○ | ○ | ○ | ○ | ○ |
 
 `*` RH voit les données salariales agrégées nécessaires au traitement de la paie
@@ -116,9 +117,11 @@ un salaire isolément ».
 - **Auto-approbation interdite** : un `approver_id` ne peut jamais être égal au
   `requester_id` d'origine (dépenses, congés, dons) — appliqué en RLS, pas
   seulement en UI.
-- **Élévation de privilège** : seul `role.manage` (SUPER_ADMIN, et DT pour les
-  comptes techniques) permet de modifier `role_permissions` /
-  `user_permission_overrides` ; toute modification est auditée.
+- **Élévation de privilège** : seul `role.manage` (SUPER_ADMIN et
+  DIRECTEUR_GENERAL) permet de modifier les rôles assignés à un membership ;
+  `DIRECTEUR_TECHNIQUE` dispose de `user.manage` pour les comptes techniques
+  uniquement (créer/suspendre), pas de `role.manage`. Toute modification est
+  auditée.
 - **Overrides individuels** (`user_permission_overrides`) : toujours accompagnés
   d'une raison, d'un auteur, et visibles dans `audit.view` — jamais un octroi
   silencieux.
