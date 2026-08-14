@@ -1,8 +1,9 @@
 # Phase 1A — Rapport de clôture
 
-Statut : **CLÔTURÉE** — tous les critères de vérification obligatoires
-(prompt maître §8, §72) sont satisfaits avec preuves reproductibles.
-Commit final : `31fa0f3` (branche `master`, `git status` propre).
+Statut : **CLÔTURÉE — validée après audit ciblé** (voir §16 ci-dessous pour
+l'audit complémentaire demandé avant autorisation de Phase 1B, exécuté les
+13-14/08/2026). Un point reste explicitement en suivi (§16.8) — accepté par
+Jean Alix Pierre comme non bloquant pour la clôture.
 
 ## 1. Fonctionnalités réellement réalisées
 
@@ -270,3 +271,208 @@ numérotation (`EMP-0001`), les permissions `employee.*`, et posant les
 bases du module Dépenses/PAPEJ (Phase 1C) prévu par `docs/roadmap.md`.
 Conformément à la règle absolue du prompt maître, la Phase 1B ne
 commencera qu'après validation explicite de ce rapport.
+
+---
+
+## 16. Audit ciblé pré-validation (demande explicite du 13/08/2026)
+
+Aucune fonctionnalité métier n'a été ajoutée pendant cet audit — uniquement
+des vérifications, des tests, et 2 corrections de durcissement identifiées
+par l'audit lui-même (migrations `20260813100015` et `20260813100016`).
+
+### 16.1 — Les 9 avertissements Security Advisor, en détail
+
+Tous relèvent de la même catégorie : *"Signed-In Users Can Execute SECURITY
+DEFINER Function"*. Pour chacune, le mécanisme d'autorisation interne et le
+test négatif qui prouve qu'un acteur non autorisé ne peut pas l'exploiter :
+
+| Fonction | Mécanisme d'autorisation interne | Test négatif |
+|---|---|---|
+| `current_user_has_permission(org, perm)` | Toujours évaluée pour `auth.uid()` uniquement (jamais un `user_id` fourni par l'appelant) → aucun IDOR possible ; renvoie `false` pour un non-membre. | `tests/integration/rls-rbac.test.ts` (suspendu → `false`) ; `tests/integration/security-definer-audit.test.ts` (anon → refusé après correctif §16.9) |
+| `next_number(org, entity_type)` | `app_private.is_active_member(auth.uid(), org)` sinon exception. | `tests/integration/numbering.test.ts` ("refuse un appel... pas membre") |
+| `admin_create_membership(org, email, role)` | `is_super_admin(actor)` OU `has_permission(actor, org, 'user.manage')`, sinon `not_authorized` + audit `denied`. | `tests/integration/security-definer-audit.test.ts` (EMPLOYE → `not_authorized`) |
+| `admin_assign_role(membership, role)` | Idem + `role.manage` ; bloque l'auto-élévation sauf SUPER_ADMIN (§7). | `security-definer-audit.test.ts`, `admin-negative.test.ts` (MANAGER/COMPTABLE), `mfa-enforcement.test.ts` (DG avec MFA) |
+| `admin_revoke_role(membership, role)` | Identique à `admin_assign_role`. | `security-definer-audit.test.ts` (EMPLOYE → `not_authorized`) |
+| `admin_set_membership_status(membership, status)` | `is_super_admin` OU `has_permission(actor, org, 'user.manage')`. | `security-definer-audit.test.ts`, `admin-negative.test.ts` (suspendu ne peut pas se réactiver lui-même ; contrôle positif : un admin autorisé le peut) |
+| `admin_set_user_status(target, org, status)` | Idem + `is_active_member(target, org)` + blocage auto-action. | `security-definer-audit.test.ts` (EMPLOYE → `not_authorized`) |
+| `admin_set_permission_override(target, org, perm, effect, reason)` | `is_super_admin` OU `has_permission(actor, org, 'permission.override')` + (depuis §16.2) `is_active_member(target, org)`. | `security-definer-audit.test.ts` (EMPLOYE → `not_authorized` ; cible hors organisation → `target_not_active_member`) |
+| `admin_update_organization_settings(org, ...)` | `is_super_admin` OU `has_permission(actor, org, 'settings.manage')`. | `security-definer-audit.test.ts`, `admin-negative.test.ts` (changement d'organisation, AAL1) |
+
+Ces fonctions sont *intentionnellement* `SECURITY DEFINER` et exposées : leur
+`REVOKE FROM public/anon` + `GRANT TO authenticated` + contrôle interne
+systématique est le mécanisme de protection lui-même (voir en-tête de
+`20260813100009_admin_rpc_functions.sql`) — les convertir en
+`SECURITY INVOKER` casserait leur fonction, puisqu'elles doivent contourner
+les `REVOKE` de table appliqués aux rôles applicatifs.
+
+### 16.2 — Audit des fonctions `admin_*` / `SECURITY DEFINER`
+
+| Critère | Résultat |
+|---|---|
+| `search_path` explicite sur toutes les fonctions `SECURITY DEFINER` | ✅ Vérifié par `grep` systématique (voir `supabase/migrations/*.sql`). 3 fonctions non-`SECURITY DEFINER` en manquaient (`set_updated_at`, `validate_membership_role`, `current_aal`) → **corrigé** (`20260813100014`, déjà dans le rapport initial). |
+| `EXECUTE` révoqué à `PUBLIC` si non nécessaire | ✅ Les 9 RPC publiques : `revoke all ... from public` présent dès l'origine. **Trouvaille de l'audit** : `anon` recevait un grant *séparé* de `PUBLIC` sur le projet cloud (absent en local) → **corrigé** (`20260813100016`, revoke explicite sur `anon` + `alter default privileges`). Les fonctions `app_private.*` n'avaient aucun `revoke` explicite (protégées uniquement par l'exclusion de schéma de l'API) → **durci** (`20260813100015`). |
+| Accès `anon` interdit | ✅ après `20260813100016` (testé : `tests/integration/security-definer-audit.test.ts`, 9/9 RPC refusées à `anon`, exécuté en local — le rejeu cloud de cette migration précise reste en suivi, §16.8). |
+| Contrôle `auth.uid()` | ✅ Chaque fonction capture `v_actor := auth.uid()` en tout premier et l'utilise pour toute décision — jamais un identifiant fourni par le client pour représenter l'acteur. |
+| Contrôle membership active | ✅ Via `is_active_member` (direct ou indirect par `has_permission`) pour l'acteur systématiquement ; pour la cible, ajouté explicitement à `admin_set_user_status` (déjà présent) et **ajouté par l'audit** à `admin_set_permission_override` (`20260813100015`, testé par `security-definer-audit.test.ts`). |
+| Contrôle organisation | ✅ Chaque fonction re-transmet le même `org_id` à `has_permission`/`write_audit_log` ; aucune fuite cross-org trouvée (testé explicitement : `admin-negative.test.ts` "changement d'organisation"). |
+| Contrôle permission | ✅ Chaque fonction vérifie la permission nommée exacte avant toute écriture (table ci-dessus). |
+| Absence de confiance dans `user_metadata` | ✅ Seul usage trouvé : `raw_user_meta_data->>'full_name'` dans `handle_new_auth_user`, pour le nom d'affichage uniquement — jamais utilisé dans une décision d'autorisation (`grep` exhaustif sur `meta_data` dans `supabase/migrations/`, un seul résultat, non sécuritaire). |
+
+### 16.3 — Vérification `service_role`
+
+| Vérification | Résultat |
+|---|---|
+| Occurrence dans le code client (`app/`, `components/`, `lib/supabase/client.ts`) | Aucune — uniquement des commentaires explicites ("jamais service_role"). |
+| Variable `NEXT_PUBLIC_*` contenant la clé | Aucune — seules `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `NEXT_PUBLIC_APP_URL` existent. |
+| Logs | Le script de bootstrap logue un mot de passe *temporaire généré aléatoirement* une seule fois par conception (transmission hors-bande) — jamais la clé `service_role` elle-même. |
+| Fichier suivi par Git | Aucun — `git grep "eyJhbGci"` (motif JWT) sur l'historique suivi : 0 résultat. `.env.local`/`.env.staging` gitignorés et jamais apparus dans `git status`. |
+| Confiné à scripts/tests serveur | ✅ Seuls `scripts/bootstrap-super-admin.mjs`, `scripts/seed-cloud-verification.mjs` et `tests/integration/helpers.ts` la lisent, tous via `process.env`. |
+
+### 16.4 — Export et comparaison de la matrice RBAC
+
+Comptages exacts (requête directe, local et cloud identiques) : **9 rôles,
+64 permissions, 211 associations `role_permissions`**.
+
+Comparaison ligne à ligne entre l'export SQL réel et `docs/permissions-matrix.md`
+§3 : **aucun écart** sur les ~35 lignes déjà documentées lors de la Phase 1A
+initiale. **Écart trouvé** : le tableau ne couvrait que 35 des 64
+permissions (les 29 restantes — `attendance.manage`, `leave.request`,
+`expense.view`, `budget.view/transfer`, `accounting.view`,
+`treasury.reconcile`, `papej.report`, `donation.view/allocate/close/report`,
+`grant.view`, `restricted_fund.manage`, `loan.view`, `customer.manage`,
+`asset.view`, `advance.request/approve`, `crm.view_all`, `document.upload`,
+`employee.view/terminate`, `permission.override` — étaient seedées mais non
+documentées dans le résumé). **Corrigé** : `docs/permissions-matrix.md` §3
+couvre maintenant les 64/64 permissions, généré directement depuis l'export
+DB (voir le fichier pour la table complète).
+
+### 16.5 — Vérifications de cloisonnement (rôle par rôle)
+
+Toutes vérifiées par `tests/integration/role-scoping.test.ts` (7 tests, verts) :
+
+| Vérification demandée | Résultat |
+|---|---|
+| DIRECTEUR_TECHNIQUE ne voit aucun salaire sans permission explicite | ✅ `employee.view_salary = false` par défaut |
+| SUPPORT ne voit aucune donnée comptable | ✅ `accounting.post/view`, `treasury.manage`, `budget.view`, `papej.view`, `donation.view` tous `false` |
+| COMPTABLE ne peut pas modifier rôles/permissions | ✅ `role.manage`, `user.manage`, `permission.override` tous `false` |
+| RH ne voit les rémunérations que si autorisée | ✅ `employee.view_salary = false` par défaut, `payroll.view_all = true` (distinction traitement paie vs consultation individuelle) ; `true` après override explicite testé, retiré après suppression de l'override |
+| AGENT_TERRAIN reste limité à son périmètre | ✅ `crm.view_own = true`, `crm.view_all/manage = false`, `employee.view_salary = false`, `accounting.post = false` (cloisonnement au niveau permission confirmé ; le cloisonnement au niveau ligne de données CRM sera testé quand les tables CRM existeront, Phase 4) |
+| EMPLOYE reste limité à ses propres données autorisées | ✅ `payroll.view_own/leave.request = true`, tout le reste `false` ; **durcissement trouvé et corrigé** : `users_select` exposait `phone`/`mfa_enabled`/`status` de tout collègue actif — restreint à soi-même + `user.manage`/`role.manage` (`20260813100015`, testé) |
+
+### 16.6 — Opérations d'administration sensibles
+
+Tous testés (`tests/integration/admin-negative.test.ts`,
+`mfa-enforcement.test.ts`, `permission-overrides.test.ts`) :
+
+| Scénario | Résultat |
+|---|---|
+| Auto-élévation DG | Refusée (`self_elevation_blocked` si MFA vérifié ; `not_authorized` sinon, puisque `role.manage` lui-même exige AAL2) |
+| Auto-élévation MANAGER | Refusée (`not_authorized` — ne détient pas `role.manage`) |
+| Auto-élévation COMPTABLE | Refusée (`not_authorized` — ne détient pas `role.manage`) |
+| Changement d'organisation | Un utilisateur de l'org A ne peut pas administrer l'org B (`not_authorized`, donnée cible inchangée vérifiée) |
+| Membership suspendue | Le compte suspendu ne peut rien administrer (`not_authorized`) ; contrôle positif : un admin autorisé PEUT réactiver un compte suspendu |
+| Override DENY | `deny` toujours prioritaire, y compris face à un `grant` concurrent ou un grant de rôle par défaut ; expiration effective (`permission-overrides.test.ts`, 5 tests) |
+| Token AAL1 alors qu'AAL2 requis | Refusé sur `current_user_has_permission` **et** sur les RPC `admin_*` elles-mêmes (pas seulement le helper de lecture) |
+
+### 16.7 — Politique SUPER_ADMIN
+
+Documentée précisément dans `docs/security.md` §12 (nouvelle section) :
+SUPER_ADMIN est le seul rôle exempté de l'interdiction d'auto-modification
+(raison : rôle de dernier recours, aucun autre rôle ne peut le débloquer),
+mais uniquement si sa session a franchi AAL2 — sinon `has_permission`
+renvoie `false` avant toute logique métier. Aucune action admin_* ne peut
+aboutir silencieusement : succès et refus produisent systématiquement une
+ligne `audit_logs` (`tests/integration/audit-completeness.test.ts`, 2 tests
+verts, incluant la vérification directe du contenu de la ligne d'audit
+produite par un refus d'auto-élévation).
+
+### 16.8 — Rejeu sur projet Supabase cloud dédié
+
+Projet cloud créé par Jean Alix Pierre (`qwydgqheceglulfxwtgo.supabase.co`,
+région us-east-2), dédié à cette vérification.
+
+**Réalisé et confirmé sur le cloud :**
+- 15 migrations (`20260813100001` à `...100015`) appliquées et confirmées
+  (`supabase migration list` : local = remote).
+- Comptages RBAC identiques au local (9 rôles / 64 permissions / 211
+  associations), vérifiés par requêtes REST directes.
+- Isolation multi-organisation confirmée par requêtes directes.
+- **52 tests d'intégration passés sur le cloud**, dont l'intégralité de
+  `mfa-enforcement.test.ts` (cycle MFA/AAL2 réel — enrôlement TOTP,
+  vérification, franchissement AAL2, blocage d'auto-élévation même
+  authentifié MFA), `numbering.test.ts`, `role-scoping.test.ts` et
+  `audit-completeness.test.ts`.
+- Comptes de démonstration recréés sur le cloud via l'API Admin
+  (`scripts/seed-cloud-verification.mjs`, sans dépendance à `psql`/Docker).
+- **Une trouvaille réelle** grâce à ce rejeu (absente des vérifications
+  locales) : `current_user_has_permission` restait exécutable par le rôle
+  `anon` sur le cloud (réponse `false` — pas de fuite de données, mais
+  l'appel n'était pas rejeté). Cause probable : le template de projet
+  Supabase Cloud accorde `anon` séparément du pseudo-rôle `PUBLIC`, que le
+  `revoke ... from public` initial ne couvrait pas. Migration corrective
+  écrite et **vérifiée en local** (`20260813100016`).
+
+**Point en suivi (non bloquant pour la clôture, accepté par Jean Alix
+Pierre) :** la migration `20260813100016` n'a pas pu être poussée vers le
+cloud. Cause identifiée avec certitude : le projet cloud n'expose de
+connexion Postgres directe qu'en IPv6 (confirmé par résolution DNS —
+`db.<ref>.supabase.co` n'a aucun enregistrement A, uniquement AAAA), et ni
+l'environnement d'exécution de Claude ni le réseau de Jean Alix Pierre ne
+disposent d'une route IPv6 vers Supabase. Le contournement recommandé (pooler
+IPv4 `aws-0-us-east-2.pooler.supabase.com`) a été tenté sur les deux
+réseaux (ports 5432 et 6543, avec et sans `sslmode=require`) : échecs
+incohérents (`Connection terminated unexpectedly` / `Connection timed out`)
+suggérant un blocage ou une instabilité réseau (pare-feu/antivirus/ISP) sur
+port non-HTTPS, indépendant du code ou de la configuration Supabase.
+**Action de suivi explicite avant tout usage réel de ce projet cloud**
+(pas avant Phase 1B) : appliquer `20260813100016` dès qu'une connexion
+Postgres directe (port 5432/6543) fonctionnelle est disponible — depuis un
+réseau sans restriction de port sortant, ou via l'éditeur SQL du dashboard
+Supabase (accessible uniquement via connexion authentifiée au compte,
+hors de portée de Claude).
+
+### 16.9 — Corrections apportées pendant l'audit
+
+| Migration | Contenu |
+|---|---|
+| `20260813100015_audit_hardening.sql` | (1) Restreint `users_select` (phone/mfa_enabled/status non exposés aux simples collègues) ; (2) ajoute la validation "cible membre actif" à `admin_set_permission_override` ; (3) révoque `EXECUTE` sur `app_private.*` pour `public`/`anon`/`authenticated`, avec re-grant cible sur les 3 fonctions réellement appelées par les policies RLS (`is_super_admin`, `is_active_member`, `has_permission`) — **régression auto-détectée et corrigée dans le même cycle** : le premier essai de ce durcissement avait cassé toutes les policies RLS pour `authenticated` (`permission denied for function is_super_admin`), repéré immédiatement par la suite de tests (7 échecs), corrigé, 69/69 tests verts ensuite. |
+| `20260813100016_fix_anon_rpc_grant.sql` | Révoque explicitement `anon` (pas seulement `PUBLIC`) sur les 9 RPC publiques + durcit les privilèges par défaut du schéma `public`. Trouvaille du rejeu cloud (§16.8). Appliquée et vérifiée en local ; application cloud en suivi. |
+
+### 16.10 — Vérifications finales rejouées (14/08/2026)
+
+```
+npm test          # 10 fichiers, 71 tests, 0 echec
+npm run typecheck  # 0 erreur
+npm run lint       # 0 erreur, 0 avertissement
+npm run build      # succes, 14 routes
+npx supabase db lint            # "No schema errors found"
+Security Advisor (Studio local) # 0 erreur, 9 avertissements (revus §16.1)
+git grep "eyJhbGci"             # 0 resultat (aucun secret suivi par Git)
+git status                      # propre apres commit de cet audit
+```
+
+### 16.11 — Nouveaux fichiers de cet audit
+
+`supabase/migrations/20260813100015_audit_hardening.sql`,
+`supabase/migrations/20260813100016_fix_anon_rpc_grant.sql`,
+`scripts/seed-cloud-verification.mjs` (seed de vérification cloud sans
+dépendance psql/Docker, réutilisable pour un futur rejeu),
+`tests/integration/security-definer-audit.test.ts`,
+`tests/integration/role-scoping.test.ts`,
+`tests/integration/admin-negative.test.ts`,
+`tests/integration/audit-completeness.test.ts`, modifications à
+`docs/security.md` (§12), `docs/permissions-matrix.md` (§3 complet),
+`tests/integration/mfa-enforcement.test.ts` (cleanup `try/finally` anti-
+cascade sur les tests MFA suivants).
+
+### 16.12 — Conclusion de l'audit
+
+Tous les points 1 à 7, 9 et 10 de la demande sont clos avec preuves. Le
+point 8 est clos pour sa part locale/vérifiable (migrations 1-15 + tests
+étendus sur le cloud réel) ; sa part restante (migration 16 sur le cloud)
+est un suivi explicite accepté par Jean Alix Pierre, non bloquant pour la
+clôture de Phase 1A ni pour l'ouverture de Phase 1B, mais bloquant avant
+tout usage réel de ce projet cloud spécifique.
+
+**Phase 1A est déclarée définitivement validée.** Phase 1B ne commence
+qu'après autorisation explicite de Jean Alix Pierre.
