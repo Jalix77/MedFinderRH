@@ -26,42 +26,47 @@ describe('MFA obligatoire (D2) — cycle complet enrolement -> AAL2', () => {
     const factorId = enroll!.id
     const secret = enroll!.totp.secret
 
-    const { data: challenge, error: challengeError } = await client.auth.mfa.challenge({ factorId })
-    expect(challengeError).toBeNull()
+    // try/finally : garantit le desenrolement meme si une assertion echoue
+    // plus bas, pour ne jamais laisser un facteur MFA residuel bloquer les
+    // tests suivants qui utilisent le meme compte de demo (dg.demo).
+    try {
+      const { data: challenge, error: challengeError } = await client.auth.mfa.challenge({ factorId })
+      expect(challengeError).toBeNull()
 
-    const { error: verifyError } = await client.auth.mfa.verify({
-      factorId,
-      challengeId: challenge!.id,
-      code: computeTotp(secret),
-    })
-    expect(verifyError).toBeNull()
+      const { error: verifyError } = await client.auth.mfa.verify({
+        factorId,
+        challengeId: challenge!.id,
+        code: computeTotp(secret),
+      })
+      expect(verifyError).toBeNull()
 
-    const after = await client.rpc('current_user_has_permission', {
-      p_org_id: orgA,
-      p_permission_code: 'role.manage',
-    })
-    expect(after.data, 'accorde apres verification MFA (AAL2)').toBe(true)
+      const after = await client.rpc('current_user_has_permission', {
+        p_org_id: orgA,
+        p_permission_code: 'role.manage',
+      })
+      expect(after.data, 'accorde apres verification MFA (AAL2)').toBe(true)
 
-    // Auto-elevation : meme pleinement authentifie MFA, un DG ne peut pas
-    // s'auto-assigner un role (voir security.md §3).
-    const { data: membership } = await client
-      .from('memberships')
-      .select('id')
-      .eq('user_id', userId)
-      .eq('organization_id', orgA)
-      .single()
+      // Auto-elevation : meme pleinement authentifie MFA, un DG ne peut pas
+      // s'auto-assigner un role (voir security.md §3).
+      const { data: membership } = await client
+        .from('memberships')
+        .select('id')
+        .eq('user_id', userId)
+        .eq('organization_id', orgA)
+        .single()
 
-    const { data: assignResult } = await client.rpc('admin_assign_role', {
-      p_membership_id: (membership as { id: string }).id,
-      p_role_code: 'SUPER_ADMIN',
-    })
-    const result = assignResult as { success: boolean; error?: string }
-    expect(result.success).toBe(false)
-    expect(result.error).toBe('self_elevation_blocked')
-
-    // Nettoyage : desenroler le facteur pour ne pas polluer les tests
-    // suivants (chaque fichier de test tourne sur la meme base reinitialisee
-    // une seule fois par la suite — voir tests/global-setup.ts).
-    await client.auth.mfa.unenroll({ factorId })
+      const { data: assignResult } = await client.rpc('admin_assign_role', {
+        p_membership_id: (membership as { id: string }).id,
+        p_role_code: 'SUPER_ADMIN',
+      })
+      const result = assignResult as { success: boolean; error?: string }
+      expect(result.success).toBe(false)
+      expect(result.error).toBe('self_elevation_blocked')
+    } finally {
+      // Chaque fichier de test tourne sur la meme base reinitialisee une
+      // seule fois par la suite (voir tests/global-setup.ts) : desenroler
+      // systematiquement pour ne pas polluer les tests suivants.
+      await client.auth.mfa.unenroll({ factorId })
+    }
   })
 })
