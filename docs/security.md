@@ -201,3 +201,45 @@ Cas particuliers :
 Voir `docs/roadmap.md` §Décisions — notamment : politique MFA exacte par rôle,
 fournisseur d'export de sauvegarde hors Supabase, durée de rétention des logs
 d'audit et des documents RH après fin de contrat.
+
+## 12. Politique SUPER_ADMIN sur ses propres rôles/permissions (audit pré-Phase 1B)
+
+Règle exacte implémentée (`app_private.has_permission`,
+`public.admin_assign_role`, `public.admin_revoke_role` — voir
+`supabase/migrations/20260813100009_admin_rpc_functions.sql` et
+`20260813100013_mfa_enforcement.sql`) :
+
+- **Tout rôle sauf SUPER_ADMIN** (DIRECTEUR_GENERAL compris) : un acteur ne
+  peut **jamais** s'auto-assigner ni s'auto-retirer un rôle, quelle que soit
+  la permission qu'il détient par ailleurs. Toute tentative renvoie
+  `self_elevation_blocked` (si `role.manage` est détenu) ou `not_authorized`
+  (sinon) — jamais silencieuse, toujours un refus explicite.
+- **SUPER_ADMIN** : seul rôle exempté de l'interdiction d'auto-modification —
+  un SUPER_ADMIN peut s'assigner ou se retirer n'importe quel rôle à
+  lui-même, **à condition que sa session courante ait déjà franchi le défi
+  MFA (AAL2)**, faute de quoi `has_permission`/`is_super_admin` renvoient
+  faux avant même d'atteindre la logique métier (aucun contournement possible
+  via cette voie). Ce choix est délibéré : SUPER_ADMIN est le rôle technique
+  de dernier recours (accès global, bootstrap, reprise après incident) — lui
+  interdire toute auto-gestion créerait un risque de blocage total du système
+  (aucun autre rôle ne peut lui accorder ou retirer un rôle) sans bénéfice de
+  sécurité proportionné, puisqu'il détient déjà, par construction, le niveau
+  de confiance maximal du système.
+- **Aucune modification silencieuse** : toute assignation, retrait,
+  suspension, override de permission ou changement de paramètres
+  d'organisation — accordée, refusée, ou en erreur — déclenche
+  systématiquement une écriture dans `audit_logs`, via deux mécanismes
+  complémentaires (voir §6) :
+  1. Le trigger générique `app_private.audit_row_trigger` sur toute écriture
+     réussie dans `organizations`, `users`, `memberships`, `roles`,
+     `role_permissions`, `membership_roles`, `user_permission_overrides`.
+  2. Un appel explicite à `app_private.write_audit_log(..., 'denied')` dans
+     chaque fonction `admin_*` avant de renvoyer un refus (nécessaire car
+     une exception SQL annulerait la transaction et perdrait la trace — voir
+     l'en-tête de `20260813100009_admin_rpc_functions.sql`).
+- **Preuve testée** (`tests/integration/mfa-enforcement.test.ts`,
+  `tests/integration/admin-negative.test.ts`) : un DIRECTEUR_GENERAL
+  pleinement authentifié MFA (AAL2) reste bloqué sur l'auto-assignation
+  (`self_elevation_blocked`) ; un MANAGER/COMPTABLE sans `role.manage` est
+  bloqué en amont (`not_authorized`) ; chaque cas produit une ligne
+  `audit_logs` avec `result = 'denied'`.

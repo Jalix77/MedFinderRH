@@ -67,44 +67,80 @@ Route Handlers) **et** répliquées en RLS via `has_permission()` — voir `secu
 `audit.view`, `user.manage`, `role.manage`, `permission.override`,
 `settings.manage`
 
-## 3. Matrice synthétique (● = accordé par défaut au rôle, ○ = non accordé par défaut, accessible via override individuel tracé)
+## 3. Matrice complète (● = accordé par défaut au rôle, ○ = non accordé par défaut, accessible via override individuel tracé)
+
+Les 64 permissions du catalogue, une ligne par permission — exhaustif (mis à
+jour lors de l'audit pré-Phase 1B pour couvrir les ~29 lignes initialement
+absentes du résumé ; vérifié par export direct des 211 associations
+`role_permissions` réellement seedées, voir
+`docs/phase-1a-closing-report.md` §Audit point 4 — aucun écart trouvé entre
+cette table et la base).
 
 | Permission | SUPER_ADMIN | DG | DT | COMPTABLE | RH | MANAGER | AGENT_TERRAIN | SUPPORT | EMPLOYE |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|
-| employee.create/update | ● | ● | ○ | ○ | ● | ○ | ○ | ○ | ○ |
+| employee.create | ● | ● | ○ | ○ | ● | ○ | ○ | ○ | ○ |
+| employee.update | ● | ● | ○ | ○ | ● | ○ | ○ | ○ | ○ |
+| employee.view | ● | ● | ○ | ○ | ● | ○ | ○ | ○ | ○ |
 | employee.view_salary | ● | ○ | ○ | ● | ○* | ○ | ○ | ○ | ○ |
+| employee.terminate | ● | ● | ○ | ○ | ● | ○ | ○ | ○ | ○ |
 | contract.manage | ● | ● | ○ | ○ | ● | ○ | ○ | ○ | ○ |
+| leave.request | ● | ● | ● | ● | ● | ● | ● | ● | ● |
 | leave.approve | ● | ● | ○ | ○ | ● | ●(équipe) | ○ | ○ | ○ |
+| attendance.manage | ● | ● | ○ | ○ | ● | ○ | ○ | ○ | ○ |
 | recruitment.manage | ● | ● | ○ | ○ | ● | ○ | ○ | ○ | ○ |
 | expense.create | ● | ● | ● | ● | ● | ● | ●(propres) | ○ | ○ |
 | expense.approve | ● | ● | ○ | ○ | ○ | ●(équipe) | ○ | ○ | ○ |
 | expense.pay | ● | ○ | ○ | ● | ○ | ○ | ○ | ○ | ○ |
 | expense.cancel | ● | ● | ○ | ● | ○ | ○ | ○ | ○ | ○ |
+| expense.view | ● | ● | ● | ● | ● | ● | ○ | ○ | ○ |
+| supplier.manage | ● | ○ | ○ | ● | ○ | ○ | ○ | ○ | ○ |
 | budget.manage | ● | ● | ○ | ● | ○ | ○ | ○ | ○ | ○ |
-| accounting.post/reverse | ● | ○ | ○ | ● | ○ | ○ | ○ | ○ | ○ |
+| budget.view | ● | ● | ○ | ● | ○ | ● | ○ | ○ | ○ |
+| budget.transfer | ● | ● | ○ | ● | ○ | ○ | ○ | ○ | ○ |
+| accounting.post | ● | ○ | ○ | ● | ○ | ○ | ○ | ○ | ○ |
+| accounting.reverse | ● | ○ | ○ | ● | ○ | ○ | ○ | ○ | ○ |
 | accounting.close_period | ● | ●(validation) | ○ | ●(préparation) | ○ | ○ | ○ | ○ | ○ |
+| accounting.view | ● | ● | ○ | ● | ○ | ○ | ○ | ○ | ○ |
 | treasury.manage | ● | ○ | ○ | ● | ○ | ○ | ○ | ○ | ○ |
+| treasury.reconcile | ● | ○ | ○ | ● | ○ | ○ | ○ | ○ | ○ |
 | papej.view | ● | ● | ○ | ● | ○ | ○ | ○ | ○ | ○ |
 | papej.manage | ● | ● | ○ | ● | ○ | ○ | ○ | ○ | ○ |
-| donation.create/update | ● | ● | ○ | ● | ○ | ○ | ○ | ○ | ○ |
+| papej.report | ● | ● | ○ | ● | ○ | ○ | ○ | ○ | ○ |
+| donation.view | ● | ● | ○ | ● | ○ | ○ | ○ | ○ | ○ |
+| donation.create | ● | ● | ○ | ● | ○ | ○ | ○ | ○ | ○ |
+| donation.update | ● | ● | ○ | ● | ○ | ○ | ○ | ○ | ○ |
 | donation.approve | ● | ● | ○ | ○ | ○ | ○ | ○ | ○ | ○ |
+| donation.allocate | ● | ● | ○ | ● | ○ | ○ | ○ | ○ | ○ |
+| donation.close | ● | ● | ○ | ○ | ○ | ○ | ○ | ○ | ○ |
+| donation.report | ● | ● | ○ | ● | ○ | ○ | ○ | ○ | ○ |
+| grant.view | ● | ● | ○ | ● | ○ | ○ | ○ | ○ | ○ |
 | grant.manage | ● | ● | ○ | ● | ○ | ○ | ○ | ○ | ○ |
+| restricted_fund.manage | ● | ● | ○ | ● | ○ | ○ | ○ | ○ | ○ |
 | loan.manage | ● | ● | ○ | ● | ○ | ○ | ○ | ○ | ○ |
-| invoice.manage / payment.record | ● | ○ | ○ | ● | ○ | ○ | ○ | ○ | ○ |
+| loan.view | ● | ● | ○ | ● | ○ | ○ | ○ | ○ | ○ |
+| invoice.manage | ● | ○ | ○ | ● | ○ | ○ | ○ | ○ | ○ |
+| payment.record | ● | ○ | ○ | ● | ○ | ○ | ○ | ○ | ○ |
 | subscription.manage | ● | ● | ○ | ○ | ○ | ○ | ●(propres) | ○ | ○ |
+| customer.manage | ● | ● | ○ | ● | ○ | ○ | ○ | ○ | ○ |
 | asset.manage | ● | ● | ● | ○ | ○ | ○ | ○ | ○ | ○ |
+| asset.view | ● | ● | ● | ● | ○ | ○ | ○ | ○ | ○ |
 | payroll.prepare | ● | ○ | ○ | ○ | ● | ○ | ○ | ○ | ○ |
 | payroll.approve | ● | ● | ○ | ○ | ○ | ○ | ○ | ○ | ○ |
 | payroll.pay | ● | ○ | ○ | ● | ○ | ○ | ○ | ○ | ○ |
 | payroll.view_all | ● | ○ | ○ | ● | ●(agrégé) | ○ | ○ | ○ | ○ |
 | payroll.view_own | ● | ● | ● | ● | ● | ● | ● | ● | ● |
+| advance.request | ● | ● | ● | ● | ● | ● | ● | ● | ● |
+| advance.approve | ● | ● | ○ | ○ | ● | ○ | ○ | ○ | ○ |
 | crm.manage | ● | ● | ○ | ○ | ○ | ●(équipe) | ○ | ○ | ○ |
 | crm.view_own | ● | ● | ○ | ○ | ○ | ● | ● | ○ | ○ |
+| crm.view_all | ● | ● | ○ | ○ | ○ | ● | ○ | ○ | ○ |
 | commission.manage | ● | ● | ○ | ○ | ○ | ○ | ○ | ○ | ○ |
+| document.upload | ● | ● | ● | ● | ● | ● | ● | ● | ● |
 | document.view_confidential | ● | ● | ○ | ●(finance) | ●(RH) | ○ | ○ | ○ | ○ |
 | audit.view | ● | ● | ●(technique) | ○ | ○ | ○ | ○ | ○ | ○ |
 | user.manage | ● | ● | ●(comptes techniques) | ○ | ○ | ○ | ○ | ○ | ○ |
 | role.manage | ● | ● | ○ | ○ | ○ | ○ | ○ | ○ | ○ |
+| permission.override | ● | ● | ○ | ○ | ○ | ○ | ○ | ○ | ○ |
 | settings.manage | ● | ● | ●(technique) | ○ | ○ | ○ | ○ | ○ | ○ |
 
 `*` RH voit les données salariales agrégées nécessaires au traitement de la paie
