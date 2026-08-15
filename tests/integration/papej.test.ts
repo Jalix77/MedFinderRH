@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest'
-import { signInAs, adminClient, getOrgIdByName } from './helpers'
+import { signInAs, signInAsElevated, adminClient, getOrgIdByName } from './helpers'
 
 /**
  * Phase 1C, sous-jalon 1C.5 — PAPEJ. Couvre le financement en base (montant
@@ -210,22 +210,27 @@ describe('Phase 1C.5 — PAPEJ', () => {
         .select('id')
         .single()
       await requesterClient.rpc('submit_expense_request', { p_expense_id: expReq!.id })
-      const { client: approverClient } = await signInAs('dg.demo@medfinder.test')
-      await approverClient.rpc('approve_expense_request', { p_expense_id: expReq!.id, p_decision: 'approved' })
+      // DIRECTEUR_GENERAL exige AAL2 pour toute permission (Phase 1A).
+      const { client: approverClient, deElevate } = await signInAsElevated('dg.demo@medfinder.test')
+      try {
+        await approverClient.rpc('approve_expense_request', { p_expense_id: expReq!.id, p_decision: 'approved' })
 
-      const { data: reportResult, error } = await client.rpc('generate_papej_report', {
-        p_grant_id: grantId,
-        p_period_start: '2032-01-01',
-        p_period_end: '2032-12-31',
-      })
-      expect(error).toBeNull()
-      expect((reportResult as { success: boolean })?.success).toBe(true)
-      const report = (reportResult as { report: { lines: Array<{ category: string; planned_amount: number; committed_open: number; available_amount: number }> } }).report
-      const line = report.lines.find((l) => l.category === 'Materiel')
-      expect(line).toBeTruthy()
-      expect(Number(line!.planned_amount)).toBe(50000)
-      expect(Number(line!.committed_open)).toBe(20000)
-      expect(Number(line!.available_amount)).toBe(30000)
+        const { data: reportResult, error } = await client.rpc('generate_papej_report', {
+          p_grant_id: grantId,
+          p_period_start: '2032-01-01',
+          p_period_end: '2032-12-31',
+        })
+        expect(error).toBeNull()
+        expect((reportResult as { success: boolean })?.success).toBe(true)
+        const report = (reportResult as { report: { lines: Array<{ category: string; planned_amount: number; committed_open: number; available_amount: number }> } }).report
+        const line = report.lines.find((l) => l.category === 'Materiel')
+        expect(line).toBeTruthy()
+        expect(Number(line!.planned_amount)).toBe(50000)
+        expect(Number(line!.committed_open)).toBe(20000)
+        expect(Number(line!.available_amount)).toBe(30000)
+      } finally {
+        await deElevate()
+      }
     })
 
     it('MANAGER (sans papej.report) ne peut pas generer de rapport', async () => {

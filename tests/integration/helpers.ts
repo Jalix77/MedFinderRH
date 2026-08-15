@@ -46,3 +46,51 @@ export async function getOrgIdByName(name: string): Promise<string> {
   }
   return (data as { id: string }).id
 }
+
+/**
+ * SUPER_ADMIN et DIRECTEUR_GENERAL exigent AAL2 pour TOUTE permission
+ * (app_private.user_requires_mfa/is_super_admin, Phase 1A) — un simple
+ * signInAs() ne suffit pas pour tester un scenario ou l'un de ces roles
+ * doit REUSSIR une action gardee par permission. Reutilise le cycle
+ * enrolement/verification TOTP deja etabli par
+ * tests/integration/mfa-enforcement.test.ts, factorise ici pour les
+ * suites Phase 1C qui en ont besoin ponctuellement (ex. approbation par un
+ * DG, validation d'exception par un SUPER_ADMIN). Toujours desenroler via
+ * la fonction retournee (finally / afterAll) pour ne pas laisser un
+ * facteur MFA residuel perturber d'autres tests sur le meme compte.
+ */
+export async function signInAsElevated(
+  email: string
+): Promise<{ client: SupabaseClient; userId: string; deElevate: () => Promise<void> }> {
+  const { client, userId } = await signInAs(email)
+  const { computeTotp } = await import('./totp')
+
+  const { data: enroll, error: enrollError } = await client.auth.mfa.enroll({ factorType: 'totp' })
+  if (enrollError || !enroll) {
+    throw new Error(`Echec enrolement MFA pour ${email}: ${enrollError?.message}`)
+  }
+  const factorId = enroll.id
+  const secret = enroll.totp.secret
+
+  const { data: challenge, error: challengeError } = await client.auth.mfa.challenge({ factorId })
+  if (challengeError || !challenge) {
+    throw new Error(`Echec challenge MFA pour ${email}: ${challengeError?.message}`)
+  }
+
+  const { error: verifyError } = await client.auth.mfa.verify({
+    factorId,
+    challengeId: challenge.id,
+    code: computeTotp(secret),
+  })
+  if (verifyError) {
+    throw new Error(`Echec verification MFA pour ${email}: ${verifyError.message}`)
+  }
+
+  return {
+    client,
+    userId,
+    deElevate: async () => {
+      await client.auth.mfa.unenroll({ factorId })
+    },
+  }
+}

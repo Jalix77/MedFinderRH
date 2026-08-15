@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll } from 'vitest'
-import { signInAs, adminClient, getOrgIdByName } from './helpers'
+import { signInAs, signInAsElevated, adminClient, getOrgIdByName } from './helpers'
 
 /**
  * Phase 1C, sous-jalon 1C.2 — Tresorerie. Aucun mouvement (cash_movements)
@@ -55,18 +55,25 @@ describe('Phase 1C.2 — Tresorerie', () => {
         .select('id')
         .single()
 
-      const { client } = await signInAs('dg.demo@medfinder.test')
-      const { data: seen, error: selectError } = await client
-        .from('mobile_money_accounts')
-        .select('id')
-        .eq('id', seeded!.id)
-      expect(selectError).toBeNull()
-      expect(seen?.length).toBe(1)
+      // DIRECTEUR_GENERAL exige AAL2 pour toute permission (Phase 1A) — un
+      // simple signInAs() laisserait has_permission(..., 'accounting.view')
+      // renvoyer false et ferait echouer cette assertion positive.
+      const { client, deElevate } = await signInAsElevated('dg.demo@medfinder.test')
+      try {
+        const { data: seen, error: selectError } = await client
+          .from('mobile_money_accounts')
+          .select('id')
+          .eq('id', seeded!.id)
+        expect(selectError).toBeNull()
+        expect(seen?.length).toBe(1)
 
-      const { error: insertError } = await client
-        .from('mobile_money_accounts')
-        .insert({ organization_id: orgA, provider: 'NatCash', gl_account_id: glId })
-      expect(insertError).toBeTruthy()
+        const { error: insertError } = await client
+          .from('mobile_money_accounts')
+          .insert({ organization_id: orgA, provider: 'NatCash', gl_account_id: glId })
+        expect(insertError).toBeTruthy()
+      } finally {
+        await deElevate()
+      }
     })
 
     it('MANAGER (ni treasury.manage ni accounting.view) ne voit aucun compte', async () => {

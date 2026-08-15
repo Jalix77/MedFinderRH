@@ -30,6 +30,15 @@ describe('Phase 1C.1 — Comptabilite minimale', () => {
       .insert({ organization_id: orgId, fiscal_year_id: fy!.id, month: 6 })
       .select('id')
       .single()
+    // reverse_journal_entry() comptabilise la contre-passation dans la
+    // periode COURANTE reelle (current_date), pas celle de l'ecriture
+    // d'origine (accounting-design.md §7) — une periode couvrant le mois 6
+    // ne suffit donc pas si le test tourne un autre mois. On ajoute une
+    // periode pour le mois reel courant (sauf s'il coincide deja avec 6).
+    const currentMonth = new Date().getMonth() + 1
+    if (currentMonth !== 6) {
+      await admin.from('accounting_periods').insert({ organization_id: orgId, fiscal_year_id: fy!.id, month: currentMonth })
+    }
     const { data: debitAccount } = await admin
       .from('chart_of_accounts')
       .insert({ organization_id: orgId, code: `D-${label}`, label: 'Compte debit test', type: 'expense' })
