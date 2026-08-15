@@ -1,9 +1,10 @@
 /**
- * Catalogue de permissions et de roles — DOIT rester synchronise avec
- * supabase/migrations/20260813100011_seed_rbac_catalogue.sql (source de
- * verite cote base). Un test d'integration (tests/integration/rbac-catalogue.test.ts)
- * verifie cette synchronisation a chaque execution — voir docs/roadmap.md,
- * risque "permissions codees en double".
+ * Catalogue de permissions et de roles — DOIT rester synchronise avec le
+ * catalogue seede en base (supabase/migrations/20260813100011_seed_rbac_catalogue.sql
+ * + toute migration d'extension ulterieure, ex. 20260814090001 pour la
+ * Phase 1B). Un test (tests/unit/rbac-catalogue-sync.test.ts) verifie cette
+ * synchronisation a chaque execution — voir docs/roadmap.md, risque
+ * "permissions codees en double".
  */
 
 export const PERMISSION_CODES = [
@@ -11,8 +12,11 @@ export const PERMISSION_CODES = [
   'employee.update',
   'employee.view',
   'employee.view_salary',
+  'employee.view_sensitive',
   'employee.terminate',
   'contract.manage',
+  'department.manage',
+  'position.manage',
   'leave.request',
   'leave.approve',
   'attendance.manage',
