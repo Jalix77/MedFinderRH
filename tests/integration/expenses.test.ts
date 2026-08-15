@@ -278,35 +278,47 @@ describe('Phase 1C.4 — Depenses', () => {
 
     it('le demandeur de l\'exception ne peut jamais la valider lui-meme, meme s\'il est DG', async () => {
       const { budgetLineId, categoryId } = await setupExpenseFixtures(orgA, 5000, `exc2${Date.now()}`)
-      const { client: dgClient, userId: dgUserId } = await signInAs('dg.demo@medfinder.test')
-      const req = await createExpenseRequest(dgClient, orgA, dgUserId, budgetLineId, categoryId, 400)
-      await dgClient.rpc('submit_expense_request', { p_expense_id: req.id })
-      await dgClient.rpc('request_expense_approval_exception', {
-        p_expense_id: req.id,
-        p_justification: 'DG lui-meme, aucun autre DG disponible',
-      })
+      // expense.create est aussi garde par has_permission -> DG doit etre
+      // eleve AAL2 des la creation de sa propre demande, pas seulement pour
+      // la validation.
+      const { client: dgClient, userId: dgUserId, deElevate } = await signInAsElevated('dg.demo@medfinder.test')
+      try {
+        const req = await createExpenseRequest(dgClient, orgA, dgUserId, budgetLineId, categoryId, 400)
+        await dgClient.rpc('submit_expense_request', { p_expense_id: req.id })
+        await dgClient.rpc('request_expense_approval_exception', {
+          p_expense_id: req.id,
+          p_justification: 'DG lui-meme, aucun autre DG disponible',
+        })
 
-      const { data, error } = await dgClient.rpc('validate_expense_approval_exception', {
-        p_expense_id: req.id,
-        p_result: 'approved',
-      })
-      expect(error).toBeNull()
-      expect((data as { success: boolean; error: string })?.success).toBe(false)
-      expect((data as { success: boolean; error: string })?.error).toBe('self_validation_blocked')
+        const { data, error } = await dgClient.rpc('validate_expense_approval_exception', {
+          p_expense_id: req.id,
+          p_result: 'approved',
+        })
+        expect(error).toBeNull()
+        expect((data as { success: boolean; error: string })?.success).toBe(false)
+        expect((data as { success: boolean; error: string })?.error).toBe('self_validation_blocked')
+      } finally {
+        await deElevate()
+      }
     })
 
     it('un validateur distinct (SUPER_ADMIN) peut valider l\'exception et l\'engagement budgetaire est cree', async () => {
       const { budgetLineId, categoryId } = await setupExpenseFixtures(orgA, 5000, `exc3${Date.now()}`)
-      const { client: dgClient, userId: dgUserId } = await signInAs('dg.demo@medfinder.test')
-      const req = await createExpenseRequest(dgClient, orgA, dgUserId, budgetLineId, categoryId, 400)
-      await dgClient.rpc('submit_expense_request', { p_expense_id: req.id })
-      await dgClient.rpc('request_expense_approval_exception', {
-        p_expense_id: req.id,
-        p_justification: 'DG lui-meme, aucun autre DG disponible',
-      })
+      const { client: dgClient, userId: dgUserId, deElevate: deElevateDg } = await signInAsElevated('dg.demo@medfinder.test')
+      let req: { id: string; expense_number: string }
+      try {
+        req = await createExpenseRequest(dgClient, orgA, dgUserId, budgetLineId, categoryId, 400)
+        await dgClient.rpc('submit_expense_request', { p_expense_id: req.id })
+        await dgClient.rpc('request_expense_approval_exception', {
+          p_expense_id: req.id,
+          p_justification: 'DG lui-meme, aucun autre DG disponible',
+        })
+      } finally {
+        await deElevateDg()
+      }
 
       // is_super_admin() exige aussi AAL2 inconditionnellement (Phase 1A).
-      const { client: superClient, deElevate } = await signInAsElevated('super.demo@medfinder.test')
+      const { client: superClient, deElevate: deElevateSuper } = await signInAsElevated('super.demo@medfinder.test')
       try {
         const { data, error } = await superClient.rpc('validate_expense_approval_exception', {
           p_expense_id: req.id,
@@ -319,7 +331,7 @@ describe('Phase 1C.4 — Depenses', () => {
         const { data: after } = await admin.from('expense_requests').select('status').eq('id', req.id).single()
         expect(after?.status).toBe('committed')
       } finally {
-        await deElevate()
+        await deElevateSuper()
       }
     })
   })
