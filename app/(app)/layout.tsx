@@ -41,8 +41,11 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
   const allowedNavItems = await Promise.all(
     NAV_ITEMS.map(async (item) => {
       if (!item.permission) return item
-      const allowed = await hasPermission(activeOrgId, item.permission)
-      return allowed ? item : null
+      const required = Array.isArray(item.permission) ? item.permission : [item.permission]
+      // Tableau = "au moins une" (ex. Depenses reste visible pour un agent
+      // terrain qui n'a que expense.create, sans jamais avoir expense.view).
+      const results = await Promise.all(required.map((p) => hasPermission(activeOrgId, p)))
+      return results.some(Boolean) ? item : null
     })
   ).then((items) => items.filter((i): i is (typeof NAV_ITEMS)[number] => i !== null))
 
