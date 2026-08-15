@@ -21,7 +21,14 @@ describe('Phase 1C.5 — PAPEJ', () => {
       .insert({ organization_id: orgId, label: `PAPEJ-${label}`, start_date: '2032-01-01', end_date: '2032-12-31' })
       .select('id')
       .single()
-    void fy
+    // record_grant_receipt() comptabilise via create_and_post_two_line_entry,
+    // qui exige une periode ouverte pour la date de reception — toutes les
+    // dates de test de ce fichier tombent dans l'annee 2032, donc les 12
+    // mois suffisent (meme lecon que accounting-core.test.ts : ne pas
+    // oublier la periode, seulement la fiscal_year, ne suffit pas).
+    await admin.from('accounting_periods').insert(
+      Array.from({ length: 12 }, (_, i) => ({ organization_id: orgId, fiscal_year_id: fy!.id, month: i + 1 }))
+    )
     const { data: revenueAccount } = await admin
       .from('chart_of_accounts')
       .insert({ organization_id: orgId, code: `REV-GL-${label}`, label: 'Produit PAPEJ test', type: 'revenue' })
