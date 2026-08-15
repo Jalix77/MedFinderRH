@@ -48,16 +48,25 @@ Fournisseurs sans changement de forme de données (juste un remplacement de
 
 Aucune permission `supplier.manage` n'est créée dans cette phase.
 
-## 3. Permissions supplémentaires (inchangé vs plan initial, sans
-`supplier.manage`)
+## 3. Permissions supplémentaires — correction : **aucune migration de
+permissions nécessaire**
 
-`expense.create`, `expense.approve`, `expense.pay`, `expense.cancel`,
-`expense.view`, `budget.manage`, `budget.view`, `budget.transfer`,
-`accounting.post`, `accounting.reverse`, `accounting.close_period`,
-`accounting.view`, `treasury.manage`, `treasury.reconcile`, `papej.view`,
-`papej.manage`, `papej.report` — **17 permissions** (18 moins
-`supplier.manage`), associations `role_permissions` selon
-`docs/permissions-matrix.md` (déjà validée en Phase 0).
+Vérification faite avant d'écrire la moindre ligne de schéma (évite de
+répéter un travail déjà fait) : les 17 permissions listées dans le plan
+initial (`expense.create/approve/pay/cancel/view`,
+`budget.manage/view/transfer`,
+`accounting.post/reverse/close_period/view`,
+`treasury.manage/reconcile`, `papej.view/manage/report`) — **et même
+`supplier.manage`, non utilisée dans cette phase mais déjà présente** —
+sont déjà seedées dans le catalogue global de 67 permissions et déjà
+associées aux rôles via `role_permissions`, depuis la migration Phase 1A
+`20260813100011_seed_rbac_catalogue.sql` (le catalogue complet couvrant
+tous les modules futurs de `docs/permissions-matrix.md` a été seedé en
+une fois, dès Phase 1A — décision déjà actée, pas une nouveauté de
+Phase 1C). `lib/permissions/codes.ts` les référence déjà aussi. Aucune
+migration `xxx_finance_permissions_catalogue.sql` n'est donc créée ; les
+migrations 1C.1 à 1C.5 ne font que consommer ces permissions existantes
+dans leurs policies RLS et RPC.
 
 ## 4. Modèle du disponible budgétaire (corrigé — pas de double comptage)
 
