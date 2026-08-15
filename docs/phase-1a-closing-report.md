@@ -311,7 +311,7 @@ les `REVOKE` de table appliqués aux rôles applicatifs.
 |---|---|
 | `search_path` explicite sur toutes les fonctions `SECURITY DEFINER` | ✅ Vérifié par `grep` systématique (voir `supabase/migrations/*.sql`). 3 fonctions non-`SECURITY DEFINER` en manquaient (`set_updated_at`, `validate_membership_role`, `current_aal`) → **corrigé** (`20260813100014`, déjà dans le rapport initial). |
 | `EXECUTE` révoqué à `PUBLIC` si non nécessaire | ✅ Les 9 RPC publiques : `revoke all ... from public` présent dès l'origine. **Trouvaille de l'audit** : `anon` recevait un grant *séparé* de `PUBLIC` sur le projet cloud (absent en local) → **corrigé** (`20260813100016`, revoke explicite sur `anon` + `alter default privileges`). Les fonctions `app_private.*` n'avaient aucun `revoke` explicite (protégées uniquement par l'exclusion de schéma de l'API) → **durci** (`20260813100015`). |
-| Accès `anon` interdit | ✅ après `20260813100016` (testé : `tests/integration/security-definer-audit.test.ts`, 9/9 RPC refusées à `anon`, exécuté en local — le rejeu cloud de cette migration précise reste en suivi, §16.8). |
+| Accès `anon` interdit | ✅ après `20260813100016` (testé : `tests/integration/security-definer-audit.test.ts`, 9/9 RPC refusées à `anon`, exécuté en local dès Phase 1A, puis **rejoué avec succès contre le cloud le 14/08/2026** pendant la clôture de Phase 1B — voir §16.8 mis à jour). |
 | Contrôle `auth.uid()` | ✅ Chaque fonction capture `v_actor := auth.uid()` en tout premier et l'utilise pour toute décision — jamais un identifiant fourni par le client pour représenter l'acteur. |
 | Contrôle membership active | ✅ Via `is_active_member` (direct ou indirect par `has_permission`) pour l'acteur systématiquement ; pour la cible, ajouté explicitement à `admin_set_user_status` (déjà présent) et **ajouté par l'audit** à `admin_set_permission_override` (`20260813100015`, testé par `security-definer-audit.test.ts`). |
 | Contrôle organisation | ✅ Chaque fonction re-transmet le même `org_id` à `has_permission`/`write_audit_log` ; aucune fuite cross-org trouvée (testé explicitement : `admin-negative.test.ts` "changement d'organisation"). |
@@ -412,9 +412,10 @@ région us-east-2), dédié à cette vérification.
   `revoke ... from public` initial ne couvrait pas. Migration corrective
   écrite et **vérifiée en local** (`20260813100016`).
 
-**Point en suivi (non bloquant pour la clôture, accepté par Jean Alix
-Pierre) :** la migration `20260813100016` n'a pas pu être poussée vers le
-cloud. Cause identifiée avec certitude : le projet cloud n'expose de
+**Point en suivi — RÉSOLU le 14/08/2026 (mise à jour rétroactive, voir
+`docs/phase-1b-closing-report.md` §9) :** la migration `20260813100016`
+n'avait pas pu être poussée vers le cloud au moment de la clôture initiale
+de Phase 1A. Cause identifiée avec certitude : le projet cloud n'expose de
 connexion Postgres directe qu'en IPv6 (confirmé par résolution DNS —
 `db.<ref>.supabase.co` n'a aucun enregistrement A, uniquement AAAA), et ni
 l'environnement d'exécution de Claude ni le réseau de Jean Alix Pierre ne
@@ -424,19 +425,21 @@ réseaux (ports 5432 et 6543, avec et sans `sslmode=require`) : échecs
 incohérents (`Connection terminated unexpectedly` / `Connection timed out`)
 suggérant un blocage ou une instabilité réseau (pare-feu/antivirus/ISP) sur
 port non-HTTPS, indépendant du code ou de la configuration Supabase.
-**Action de suivi explicite avant tout usage réel de ce projet cloud**
-(pas avant Phase 1B) : appliquer `20260813100016` dès qu'une connexion
-Postgres directe (port 5432/6543) fonctionnelle est disponible — depuis un
-réseau sans restriction de port sortant, ou via l'éditeur SQL du dashboard
-Supabase (accessible uniquement via connexion authentifiée au compte,
-hors de portée de Claude).
+Contournement finalement retenu, pendant la vérification finale de
+Phase 1B (Docker local devenu indisponible par ailleurs) : Jean Alix
+Pierre a appliqué `20260813100016`, avec les 8 migrations Phase 1B, via
+l'éditeur SQL du dashboard Supabase cloud (connexion HTTPS authentifiée,
+aucune route Postgres directe requise). Rejeu fonctionnel confirmé :
+54 tests d'intégration verts contre ce projet cloud après application,
+dont `security-definer-audit.test.ts` qui exerce directement le
+comportement corrigé par cette migration. **Ce suivi est donc clos.**
 
 ### 16.9 — Corrections apportées pendant l'audit
 
 | Migration | Contenu |
 |---|---|
 | `20260813100015_audit_hardening.sql` | (1) Restreint `users_select` (phone/mfa_enabled/status non exposés aux simples collègues) ; (2) ajoute la validation "cible membre actif" à `admin_set_permission_override` ; (3) révoque `EXECUTE` sur `app_private.*` pour `public`/`anon`/`authenticated`, avec re-grant cible sur les 3 fonctions réellement appelées par les policies RLS (`is_super_admin`, `is_active_member`, `has_permission`) — **régression auto-détectée et corrigée dans le même cycle** : le premier essai de ce durcissement avait cassé toutes les policies RLS pour `authenticated` (`permission denied for function is_super_admin`), repéré immédiatement par la suite de tests (7 échecs), corrigé, 69/69 tests verts ensuite. |
-| `20260813100016_fix_anon_rpc_grant.sql` | Révoque explicitement `anon` (pas seulement `PUBLIC`) sur les 9 RPC publiques + durcit les privilèges par défaut du schéma `public`. Trouvaille du rejeu cloud (§16.8). Appliquée et vérifiée en local ; application cloud en suivi. |
+| `20260813100016_fix_anon_rpc_grant.sql` | Révoque explicitement `anon` (pas seulement `PUBLIC`) sur les 9 RPC publiques + durcit les privilèges par défaut du schéma `public`. Trouvaille du rejeu cloud (§16.8). Appliquée et vérifiée en local dès Phase 1A ; **appliquée et vérifiée en cloud le 14/08/2026** pendant la clôture de Phase 1B (voir §16.8 mis à jour et `docs/phase-1b-closing-report.md` §9). |
 
 ### 16.10 — Vérifications finales rejouées (14/08/2026)
 
