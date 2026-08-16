@@ -108,6 +108,21 @@ export function PapejReportGenerator({ grantId }: { grantId: string }) {
             Exporter en CSV
           </button>
         )}
+        {report && (
+          // Lien direct (pas de fetch+blob) : requete GET meme origine,
+          // les cookies de session sont envoyes automatiquement par le
+          // navigateur, et Content-Disposition: attachment declenche le
+          // telechargement. Periode prise sur le rapport deja genere
+          // (report.period_start/end), jamais sur les champs du
+          // formulaire qui pourraient avoir change sans regeneration —
+          // garantit que le PDF correspond exactement a ce qui est affiche.
+          <a
+            href={`/api/papej/${grantId}/rapport-pdf?period_start=${report.period_start}&period_end=${report.period_end}`}
+            className="rounded-lg border border-mf-border px-4 py-2 text-sm font-semibold text-mf-navy-700 hover:bg-slate-50"
+          >
+            Telecharger le PDF
+          </a>
+        )}
       </form>
       {error && <p className="text-sm text-mf-danger">{error}</p>}
 
