@@ -1,4 +1,5 @@
 import { defineConfig } from 'vitest/config'
+import react from '@vitejs/plugin-react'
 import path from 'node:path'
 import fs from 'node:fs'
 
@@ -12,9 +13,15 @@ if (fs.existsSync(envLocalPath)) {
 }
 
 export default defineConfig({
+  plugins: [react()],
   test: {
+    // Par defaut 'node' (tests unitaires/integration purs, DB reelle) ;
+    // les tests composants (tests/unit/components/*.test.tsx) declarent
+    // `// @vitest-environment jsdom` en tete de fichier pour basculer
+    // localement sans affecter le reste de la suite.
     environment: 'node',
-    include: ['tests/**/*.test.ts'],
+    include: ['tests/**/*.test.{ts,tsx}'],
+    setupFiles: ['tests/setup-jest-dom.ts'],
     testTimeout: 20000,
     hookTimeout: 30000,
     globalSetup: ['tests/global-setup.ts'],
