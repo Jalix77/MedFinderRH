@@ -42,6 +42,24 @@ const PAGE_WIDTH = 595.28 // A4 portrait, points
 const PAGE_HEIGHT = 841.89
 const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2
 
+// pdf-lib encode les polices StandardFonts en WinAnsi (Latin-1 / code page
+// 1252) : page.drawText() leve une exception sur tout caractere hors de
+// cette table (code point > 0xFF, a de rares exceptions pres). En trouvaille
+// directe (reproduite localement) : Intl.NumberFormat('fr-FR', { style:
+// 'currency', ... }) — voir lib/format/money.ts, formatage ecran inchange —
+// insere une ESPACE FINE INSECABLE (U+202F) comme separateur de milliers,
+// absente de WinAnsi, ce qui faisait planter (500) toute generation PDF des
+// qu'un montant depassait 999 (ex. "1 234,00 HTG"). D'autres formatages
+// Intl (dates, listes) peuvent produire des variantes similaires selon le
+// runtime ICU. `winAnsiSafe` neutralise uniquement ces variantes d'espace
+// non imprimables/non representables avant tout drawText — jamais la
+// logique de formatage ni les donnees elles-memes.
+const NON_WINANSI_SPACES = /[   -   　﻿]/g
+
+function winAnsiSafe(value: string): string {
+  return value.replace(NON_WINANSI_SPACES, ' ')
+}
+
 /**
  * Genere le PDF du rapport PAPEJ a partir EXACTEMENT des memes donnees que
  * l'ecran (§ exigence : "l'export doit respecter exactement les filtres et
@@ -71,7 +89,7 @@ export async function buildPapejReportPdf(report: PapejReportData, generatedAt: 
     const size = options.size ?? 10
     const f = options.f ?? font
     newPageIfNeeded(size + (options.gap ?? 4))
-    page.drawText(value, { x: options.x ?? MARGIN, y, size, font: f, color: options.color ?? rgb(0.1, 0.1, 0.15) })
+    page.drawText(winAnsiSafe(value), { x: options.x ?? MARGIN, y, size, font: f, color: options.color ?? rgb(0.1, 0.1, 0.15) })
     y -= size + (options.gap ?? 4)
   }
 
@@ -95,8 +113,8 @@ export async function buildPapejReportPdf(report: PapejReportData, generatedAt: 
   /** Ligne "libelle : valeur" alignee sur deux colonnes fixes. */
   function fieldRow(label: string, value: string) {
     newPageIfNeeded(16)
-    page.drawText(label, { x: MARGIN, y, size: 10, font: bold, color: rgb(0.35, 0.35, 0.4) })
-    page.drawText(value, { x: MARGIN + 170, y, size: 10, font, color: rgb(0.1, 0.1, 0.15) })
+    page.drawText(winAnsiSafe(label), { x: MARGIN, y, size: 10, font: bold, color: rgb(0.35, 0.35, 0.4) })
+    page.drawText(winAnsiSafe(value), { x: MARGIN + 170, y, size: 10, font, color: rgb(0.1, 0.1, 0.15) })
     y -= 16
   }
 

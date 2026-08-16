@@ -3,10 +3,12 @@ import { loginAs } from './helpers'
 import { createGrant, createBudgetWithTwoLines, getOrgAId } from './fixtures'
 import { createClient } from '@supabase/supabase-js'
 
-// pdf-parse n'a pas de types officiels a jour pour cet import — require
-// direct, coherent avec le reste des fixtures E2E (voir tests/e2e/fixtures.ts).
+// pdf-parse v2 (API classe, differente de la fonction v1 documentee dans la
+// plupart des exemples en ligne — verifie contre node_modules/pdf-parse/README.md
+// installe reellement ici) : require direct, coherent avec le reste des
+// fixtures E2E (voir tests/e2e/fixtures.ts).
 // eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParse = require('pdf-parse')
+const { PDFParse } = require('pdf-parse')
 
 function adminClient() {
   if (typeof globalThis.WebSocket === 'undefined') {
@@ -68,7 +70,8 @@ test.describe('Export PDF PAPEJ', () => {
     const buffer = await response.body()
     expect(buffer.byteLength).toBeGreaterThan(500) // un PDF minimal valide n'est jamais quelques octets
 
-    const parsed = await pdfParse(buffer)
+    const parser = new PDFParse({ data: buffer })
+    const parsed = await parser.getText()
     const pdfText = parsed.text as string
 
     // Contenu essentiel exige (§ obligatoire) : organisation, financement,
