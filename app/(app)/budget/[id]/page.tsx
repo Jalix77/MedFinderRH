@@ -32,24 +32,40 @@ export default async function BudgetDetailPage({ params }: PageProps) {
     .maybeSingle()
   if (!budget) return <AccessDenied />
 
-  const [{ data: lines }, { data: costCenters }] = await Promise.all([
+  const [{ data: rawLines }, { data: costCenters }] = await Promise.all([
     supabase
       .from('budget_lines')
-      .select('id, category, planned_amount, currency, cost_center_id, budget_line_balances ( committed_open, available_amount )')
+      .select('id, category, planned_amount, currency, cost_center_id')
       .eq('budget_id', id)
       .order('category'),
     supabase.from('cost_centers').select('id, code, name'),
   ])
 
-  const lineIds = (lines ?? []).map((l) => l.id)
-  const { data: commitments } =
+  const lineIds = (rawLines ?? []).map((l) => l.id)
+  // budget_line_balances est une vue (security_invoker, §10 du plan
+  // corrige) sans contrainte FK reelle vers budget_lines — PostgREST ne
+  // peut donc pas l'embarquer via select=...,budget_line_balances(...)
+  // (PGRST200 "no relationship found", trouvaille du rejeu E2E : la page
+  // affichait silencieusement "Aucune ligne budgetaire" meme quand des
+  // lignes existaient, l'erreur de la requete n'etant jamais verifiee).
+  // Corrige par deux requetes distinctes, jointes cote application.
+  const [{ data: balancesRows }, { data: commitments }] =
     lineIds.length > 0
-      ? await supabase
-          .from('budget_commitments')
-          .select('id, budget_line_id, amount, status, reference_type, reference_id, created_at')
-          .in('budget_line_id', lineIds)
-          .eq('status', 'active')
-      : { data: [] }
+      ? await Promise.all([
+          supabase
+            .from('budget_line_balances')
+            .select('budget_line_id, committed_open, available_amount')
+            .in('budget_line_id', lineIds),
+          supabase
+            .from('budget_commitments')
+            .select('id, budget_line_id, amount, status, reference_type, reference_id, created_at')
+            .in('budget_line_id', lineIds)
+            .eq('status', 'active'),
+        ])
+      : [{ data: [] }, { data: [] }]
+
+  const balanceByLineId = new Map((balancesRows ?? []).map((b) => [b.budget_line_id, b]))
+  const lines = (rawLines ?? []).map((l) => ({ ...l, balance: balanceByLineId.get(l.id) ?? null }))
 
   return (
     <div className="space-y-6">
@@ -88,8 +104,8 @@ export default async function BudgetDetailPage({ params }: PageProps) {
               </tr>
             </thead>
             <tbody>
-              {(lines ?? []).map((l) => {
-                const balance = Array.isArray(l.budget_line_balances) ? l.budget_line_balances[0] : l.budget_line_balances
+              {lines.map((l) => {
+                const balance = l.balance
                 return (
                   <tr key={l.id} className="border-t border-mf-border">
                     <td className="py-2 pr-4 text-mf-navy-900">{l.category}</td>
@@ -118,12 +134,13 @@ export default async function BudgetDetailPage({ params }: PageProps) {
             <form action={createBudgetLineAction} className="mt-3 grid grid-cols-2 gap-3">
               <input type="hidden" name="budget_id" value={budget.id} />
               <div>
-                <label className="block text-xs font-medium text-mf-navy-900">Categorie</label>
-                <input name="category" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm" />
+                <label htmlFor="line-category" className="block text-xs font-medium text-mf-navy-900">Categorie</label>
+                <input id="line-category" name="category" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-mf-navy-900">Montant planifie</label>
+                <label htmlFor="line-planned_amount" className="block text-xs font-medium text-mf-navy-900">Montant planifie</label>
                 <input
+                  id="line-planned_amount"
                   type="number"
                   step="0.01"
                   min="0"
@@ -133,8 +150,8 @@ export default async function BudgetDetailPage({ params }: PageProps) {
                 />
               </div>
               <div>
-                <label className="block text-xs font-medium text-mf-navy-900">Centre de cout (optionnel)</label>
-                <select name="cost_center_id" className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm">
+                <label htmlFor="line-cost_center_id" className="block text-xs font-medium text-mf-navy-900">Centre de cout (optionnel)</label>
+                <select id="line-cost_center_id" name="cost_center_id" className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm">
                   <option value="">—</option>
                   {(costCenters ?? []).map((c) => (
                     <option key={c.id} value={c.id}>
@@ -144,8 +161,8 @@ export default async function BudgetDetailPage({ params }: PageProps) {
                 </select>
               </div>
               <div>
-                <label className="block text-xs font-medium text-mf-navy-900">Devise</label>
-                <select name="currency" className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm">
+                <label htmlFor="line-currency" className="block text-xs font-medium text-mf-navy-900">Devise</label>
+                <select id="line-currency" name="currency" className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm">
                   <option value="HTG">HTG</option>
                   <option value="USD">USD</option>
                 </select>

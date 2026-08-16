@@ -40,8 +40,9 @@ export default async function NewExpensePage() {
       <form action={createExpenseRequestAction} className="space-y-4 rounded-2xl border border-mf-border bg-mf-surface p-6 shadow-sm">
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className="block text-xs font-medium text-mf-navy-900">Beneficiaire</label>
+            <label htmlFor="payee_name" className="block text-xs font-medium text-mf-navy-900">Beneficiaire</label>
             <input
+              id="payee_name"
               name="payee_name"
               required
               placeholder="Nom du fournisseur / beneficiaire"
@@ -49,16 +50,18 @@ export default async function NewExpensePage() {
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-mf-navy-900">Reference (optionnel)</label>
+            <label htmlFor="payee_reference" className="block text-xs font-medium text-mf-navy-900">Reference (optionnel)</label>
             <input
+              id="payee_reference"
               name="payee_reference"
               placeholder="Ex. numero de facture"
               className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm"
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-mf-navy-900">Montant</label>
+            <label htmlFor="amount" className="block text-xs font-medium text-mf-navy-900">Montant</label>
             <input
+              id="amount"
               type="number"
               step="0.01"
               min="0.01"
@@ -68,23 +71,24 @@ export default async function NewExpensePage() {
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-mf-navy-900">Devise</label>
-            <select name="currency" className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm">
+            <label htmlFor="currency" className="block text-xs font-medium text-mf-navy-900">Devise</label>
+            <select id="currency" name="currency" className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm">
               <option value="HTG">HTG</option>
               <option value="USD">USD</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-mf-navy-900">Mode de paiement prevu</label>
-            <select name="payment_method" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm">
+            <label htmlFor="payment_method" className="block text-xs font-medium text-mf-navy-900">Mode de paiement prevu</label>
+            <select id="payment_method" name="payment_method" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm">
               <option value="cash">Caisse</option>
               <option value="bank">Banque</option>
               <option value="mobile_money">Mobile money</option>
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-mf-navy-900">Date</label>
+            <label htmlFor="requested_date" className="block text-xs font-medium text-mf-navy-900">Date</label>
             <input
+              id="requested_date"
               type="date"
               name="requested_date"
               defaultValue={new Date().toISOString().slice(0, 10)}
@@ -92,8 +96,9 @@ export default async function NewExpensePage() {
             />
           </div>
           <div className="col-span-2">
-            <label className="block text-xs font-medium text-mf-navy-900">Ligne budgetaire</label>
+            <label htmlFor="budget_line_id" className="block text-xs font-medium text-mf-navy-900">Ligne budgetaire</label>
             <select
+              id="budget_line_id"
               name="budget_line_id"
               required
               className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm"
@@ -112,8 +117,8 @@ export default async function NewExpensePage() {
             )}
           </div>
           <div>
-            <label className="block text-xs font-medium text-mf-navy-900">Categorie (optionnel)</label>
-            <select name="category_id" className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm">
+            <label htmlFor="category_id" className="block text-xs font-medium text-mf-navy-900">Categorie (optionnel)</label>
+            <select id="category_id" name="category_id" className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm">
               <option value="">—</option>
               {(categories ?? []).map((c) => (
                 <option key={c.id} value={c.id}>
@@ -123,8 +128,8 @@ export default async function NewExpensePage() {
             </select>
           </div>
           <div>
-            <label className="block text-xs font-medium text-mf-navy-900">Centre de cout (optionnel)</label>
-            <select name="cost_center_id" className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm">
+            <label htmlFor="cost_center_id" className="block text-xs font-medium text-mf-navy-900">Centre de cout (optionnel)</label>
+            <select id="cost_center_id" name="cost_center_id" className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm">
               <option value="">—</option>
               {(costCenters ?? []).map((c) => (
                 <option key={c.id} value={c.id}>
@@ -134,8 +139,8 @@ export default async function NewExpensePage() {
             </select>
           </div>
           <div className="col-span-2">
-            <label className="block text-xs font-medium text-mf-navy-900">Description (optionnel)</label>
-            <textarea name="description" rows={3} className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm" />
+            <label htmlFor="description" className="block text-xs font-medium text-mf-navy-900">Description (optionnel)</label>
+            <textarea id="description" name="description" rows={3} className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm" />
           </div>
         </div>
         <button

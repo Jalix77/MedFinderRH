@@ -94,12 +94,13 @@ export default async function BudgetPage() {
             <summary className="cursor-pointer text-sm font-medium text-mf-navy-700">+ Nouveau budget</summary>
             <form action={createBudgetAction} className="mt-3 grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-mf-navy-900">Nom</label>
-                <input name="name" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm" />
+                <label htmlFor="budget-name" className="block text-xs font-medium text-mf-navy-900">Nom</label>
+                <input id="budget-name" name="name" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-mf-navy-900">Exercice comptable</label>
+                <label htmlFor="budget-fiscal_year_id" className="block text-xs font-medium text-mf-navy-900">Exercice comptable</label>
                 <select
+                  id="budget-fiscal_year_id"
                   name="fiscal_year_id"
                   required
                   className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm"
@@ -141,16 +142,16 @@ export default async function BudgetPage() {
               </ul>
               <form action={createFiscalYearAction} className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-mf-navy-900">Libelle</label>
-                  <input name="label" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm" />
+                  <label htmlFor="fy-label" className="block text-xs font-medium text-mf-navy-900">Libelle</label>
+                  <input id="fy-label" name="label" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-mf-navy-900">Date de debut</label>
-                  <input type="date" name="start_date" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm" />
+                  <label htmlFor="fy-start_date" className="block text-xs font-medium text-mf-navy-900">Date de debut</label>
+                  <input id="fy-start_date" type="date" name="start_date" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-mf-navy-900">Date de fin</label>
-                  <input type="date" name="end_date" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm" />
+                  <label htmlFor="fy-end_date" className="block text-xs font-medium text-mf-navy-900">Date de fin</label>
+                  <input id="fy-end_date" type="date" name="end_date" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm" />
                 </div>
                 <div className="col-span-3">
                   <button
@@ -182,16 +183,16 @@ export default async function BudgetPage() {
               </ul>
               <form action={createCostCenterAction} className="grid grid-cols-3 gap-3">
                 <div>
-                  <label className="block text-xs font-medium text-mf-navy-900">Code</label>
-                  <input name="code" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm" />
+                  <label htmlFor="cc-code" className="block text-xs font-medium text-mf-navy-900">Code</label>
+                  <input id="cc-code" name="code" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-mf-navy-900">Nom</label>
-                  <input name="name" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm" />
+                  <label htmlFor="cc-name" className="block text-xs font-medium text-mf-navy-900">Nom</label>
+                  <input id="cc-name" name="name" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm" />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-mf-navy-900">Departement (optionnel)</label>
-                  <select name="department_id" className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm">
+                  <label htmlFor="cc-department_id" className="block text-xs font-medium text-mf-navy-900">Departement (optionnel)</label>
+                  <select id="cc-department_id" name="department_id" className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm">
                     <option value="">—</option>
                     {(departments ?? []).map((d) => (
                       <option key={d.id} value={d.id}>

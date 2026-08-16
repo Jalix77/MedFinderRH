@@ -92,8 +92,8 @@ export default async function TreasuryPage() {
         canManage={canManage}
       >
         {canManage && (
-          <CreateForm action={createCashAccountAction} glAccounts={glAccounts ?? []}>
-            <TextField label="Nom de la caisse" name="name" required />
+          <CreateForm action={createCashAccountAction} glAccounts={glAccounts ?? []} idPrefix="cash">
+            <TextField label="Nom de la caisse" name="name" idPrefix="cash" required />
           </CreateForm>
         )}
       </AccountSection>
@@ -108,9 +108,9 @@ export default async function TreasuryPage() {
         canManage={canManage}
       >
         {canManage && (
-          <CreateForm action={createBankAccountAction} glAccounts={glAccounts ?? []}>
-            <TextField label="Nom de la banque" name="bank_name" required />
-            <TextField label="Numero de compte (masque)" name="account_number_masked" />
+          <CreateForm action={createBankAccountAction} glAccounts={glAccounts ?? []} idPrefix="bank">
+            <TextField label="Nom de la banque" name="bank_name" idPrefix="bank" required />
+            <TextField label="Numero de compte (masque)" name="account_number_masked" idPrefix="bank" />
           </CreateForm>
         )}
       </AccountSection>
@@ -125,9 +125,9 @@ export default async function TreasuryPage() {
         canManage={canManage}
       >
         {canManage && (
-          <CreateForm action={createMobileMoneyAccountAction} glAccounts={glAccounts ?? []}>
-            <TextField label="Fournisseur (ex. MonCash)" name="provider" required />
-            <TextField label="Numero de compte (masque)" name="account_number_masked" />
+          <CreateForm action={createMobileMoneyAccountAction} glAccounts={glAccounts ?? []} idPrefix="mm">
+            <TextField label="Fournisseur (ex. MonCash)" name="provider" idPrefix="mm" required />
+            <TextField label="Numero de compte (masque)" name="account_number_masked" idPrefix="mm" />
           </CreateForm>
         )}
       </AccountSection>
@@ -147,11 +147,11 @@ export default async function TreasuryPage() {
                 ))}
               </ul>
               <form action={createChartOfAccountAction} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <TextField label="Code" name="code" required />
-                <TextField label="Libelle" name="label" required />
+                <TextField label="Code" name="code" idPrefix="gl" required />
+                <TextField label="Libelle" name="label" idPrefix="gl" required />
                 <div>
-                  <label className="block text-xs font-medium text-mf-navy-900">Type</label>
-                  <select name="type" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm">
+                  <label htmlFor="gl-type" className="block text-xs font-medium text-mf-navy-900">Type</label>
+                  <select id="gl-type" name="type" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm">
                     <option value="asset">Actif</option>
                     <option value="liability">Passif</option>
                     <option value="equity">Capitaux propres</option>
@@ -242,10 +242,12 @@ export default async function TreasuryPage() {
 function CreateForm({
   action,
   glAccounts,
+  idPrefix,
   children,
 }: {
   action: (formData: FormData) => Promise<void>
   glAccounts: { id: string; code: string; label: string }[]
+  idPrefix: string
   children: React.ReactNode
 }) {
   return (
@@ -254,8 +256,8 @@ function CreateForm({
       <form action={action} className="mt-3 grid grid-cols-2 gap-3">
         {children}
         <div>
-          <label className="block text-xs font-medium text-mf-navy-900">Compte comptable (plan comptable)</label>
-          <select name="gl_account_id" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm">
+          <label htmlFor={`${idPrefix}-gl_account_id`} className="block text-xs font-medium text-mf-navy-900">Compte comptable (plan comptable)</label>
+          <select id={`${idPrefix}-gl_account_id`} name="gl_account_id" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm">
             <option value="">—</option>
             {glAccounts.map((g) => (
               <option key={g.id} value={g.id}>
@@ -265,8 +267,8 @@ function CreateForm({
           </select>
         </div>
         <div>
-          <label className="block text-xs font-medium text-mf-navy-900">Devise</label>
-          <select name="currency" className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm">
+          <label htmlFor={`${idPrefix}-currency`} className="block text-xs font-medium text-mf-navy-900">Devise</label>
+          <select id={`${idPrefix}-currency`} name="currency" className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm">
             <option value="HTG">HTG</option>
             <option value="USD">USD</option>
           </select>
@@ -284,11 +286,23 @@ function CreateForm({
   )
 }
 
-function TextField({ label, name, required }: { label: string; name: string; required?: boolean }) {
+function TextField({
+  label,
+  name,
+  idPrefix,
+  required,
+}: {
+  label: string
+  name: string
+  idPrefix: string
+  required?: boolean
+}) {
+  const id = `${idPrefix}-${name}`
   return (
     <div>
-      <label className="block text-xs font-medium text-mf-navy-900">{label}</label>
+      <label htmlFor={id} className="block text-xs font-medium text-mf-navy-900">{label}</label>
       <input
+        id={id}
         name={name}
         required={required}
         className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm"

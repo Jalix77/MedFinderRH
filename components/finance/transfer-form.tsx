@@ -42,8 +42,8 @@ export function TransferForm({
     <form ref={formRef} action={handleSubmit} className="grid grid-cols-2 gap-3 sm:grid-cols-4">
       <input type="hidden" name="budget_id" value={budgetId} />
       <div>
-        <label className="block text-xs font-medium text-mf-navy-900">De la ligne</label>
-        <select name="from_line_id" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm">
+        <label htmlFor="from_line_id" className="block text-xs font-medium text-mf-navy-900">De la ligne</label>
+        <select id="from_line_id" name="from_line_id" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm">
           <option value="">—</option>
           {lines.map((l) => (
             <option key={l.id} value={l.id}>
@@ -53,8 +53,8 @@ export function TransferForm({
         </select>
       </div>
       <div>
-        <label className="block text-xs font-medium text-mf-navy-900">Vers la ligne</label>
-        <select name="to_line_id" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm">
+        <label htmlFor="to_line_id" className="block text-xs font-medium text-mf-navy-900">Vers la ligne</label>
+        <select id="to_line_id" name="to_line_id" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm">
           <option value="">—</option>
           {lines.map((l) => (
             <option key={l.id} value={l.id}>
@@ -64,8 +64,9 @@ export function TransferForm({
         </select>
       </div>
       <div>
-        <label className="block text-xs font-medium text-mf-navy-900">Montant</label>
+        <label htmlFor="transfer_amount" className="block text-xs font-medium text-mf-navy-900">Montant</label>
         <input
+          id="transfer_amount"
           type="number"
           step="0.01"
           min="0.01"
@@ -75,8 +76,8 @@ export function TransferForm({
         />
       </div>
       <div>
-        <label className="block text-xs font-medium text-mf-navy-900">Justification</label>
-        <input name="reason" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm" />
+        <label htmlFor="transfer_reason" className="block text-xs font-medium text-mf-navy-900">Justification</label>
+        <input id="transfer_reason" name="reason" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm" />
       </div>
       <div className="col-span-2 sm:col-span-4">
         <button

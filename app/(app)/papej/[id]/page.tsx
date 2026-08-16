@@ -33,11 +33,11 @@ export default async function GrantDetailPage({ params }: PageProps) {
     .maybeSingle()
   if (!grant) return <AccessDenied />
 
-  const [{ data: grantLines }, { data: cashAccounts }, { data: bankAccounts }, { data: mobileAccounts }] =
+  const [{ data: rawGrantLines }, { data: cashAccounts }, { data: bankAccounts }, { data: mobileAccounts }] =
     await Promise.all([
       supabase
         .from('grant_budget_lines')
-        .select('id, category, notes, budget_line_id, budget_lines ( budget_line_balances ( planned_amount, committed_open, available_amount ) )')
+        .select('id, category, notes, budget_line_id')
         .eq('grant_id', id)
         .order('category'),
       supabase.from('cash_accounts').select('id, name').eq('status', 'active'),
@@ -45,26 +45,35 @@ export default async function GrantDetailPage({ params }: PageProps) {
       supabase.from('mobile_money_accounts').select('id, provider').eq('status', 'active'),
     ])
 
-  const lineIds = (grantLines ?? []).map((l) => l.budget_line_id).filter(Boolean) as string[]
-  const { data: missingJustifications } =
+  const lineIds = (rawGrantLines ?? []).map((l) => l.budget_line_id).filter(Boolean) as string[]
+  // budget_line_balances est une vue sans FK reelle vers budget_lines —
+  // PostgREST ne peut pas l'embarquer via select=...,budget_lines(budget_line_balances(...))
+  // (meme trouvaille que app/(app)/budget/[id]/page.tsx, PGRST200 "no
+  // relationship found" silencieusement ignore faute de verifier `error`).
+  // Corrige par une requete separee, jointe cote application.
+  const [{ data: balancesRows }, { data: missingJustifications }] =
     lineIds.length > 0
-      ? await supabase
-          .from('expense_requests')
-          .select('id, expense_number, payee_name, amount, currency')
-          .in('budget_line_id', lineIds)
-          .eq('status', 'paid')
-      : { data: [] }
+      ? await Promise.all([
+          supabase
+            .from('budget_line_balances')
+            .select('budget_line_id, planned_amount, committed_open, available_amount')
+            .in('budget_line_id', lineIds),
+          supabase
+            .from('expense_requests')
+            .select('id, expense_number, payee_name, amount, currency')
+            .in('budget_line_id', lineIds)
+            .eq('status', 'paid'),
+        ])
+      : [{ data: [] }, { data: [] }]
 
-  const totalAvailable = (grantLines ?? []).reduce((sum, l) => {
-    const balances = l.budget_lines?.budget_line_balances
-    const b = Array.isArray(balances) ? balances[0] : balances
-    return sum + Number(b?.available_amount ?? 0)
-  }, 0)
-  const totalCommitted = (grantLines ?? []).reduce((sum, l) => {
-    const balances = l.budget_lines?.budget_line_balances
-    const b = Array.isArray(balances) ? balances[0] : balances
-    return sum + Number(b?.committed_open ?? 0)
-  }, 0)
+  const balanceByLineId = new Map((balancesRows ?? []).map((b) => [b.budget_line_id, b]))
+  const grantLines = (rawGrantLines ?? []).map((l) => ({
+    ...l,
+    balance: l.budget_line_id ? (balanceByLineId.get(l.budget_line_id) ?? null) : null,
+  }))
+
+  const totalAvailable = grantLines.reduce((sum, l) => sum + Number(l.balance?.available_amount ?? 0), 0)
+  const totalCommitted = grantLines.reduce((sum, l) => sum + Number(l.balance?.committed_open ?? 0), 0)
 
   return (
     <div className="space-y-6">
@@ -98,9 +107,8 @@ export default async function GrantDetailPage({ params }: PageProps) {
               </tr>
             </thead>
             <tbody>
-              {(grantLines ?? []).map((l) => {
-                const balances = l.budget_lines?.budget_line_balances
-                const b = Array.isArray(balances) ? balances[0] : balances
+              {grantLines.map((l) => {
+                const b = l.balance
                 return (
                   <tr key={l.id} className="border-t border-mf-border">
                     <td className="py-2 pr-4 text-mf-navy-900">{l.category}</td>
@@ -112,7 +120,7 @@ export default async function GrantDetailPage({ params }: PageProps) {
                   </tr>
                 )
               })}
-              {(grantLines ?? []).length === 0 && (
+              {grantLines.length === 0 && (
                 <tr>
                   <td colSpan={4} className="py-4 text-center text-slate-400">
                     Aucune ligne budgetaire.
@@ -129,12 +137,13 @@ export default async function GrantDetailPage({ params }: PageProps) {
             <form action={createGrantBudgetLineAction} className="mt-3 grid grid-cols-2 gap-3">
               <input type="hidden" name="grant_id" value={grant.id} />
               <div>
-                <label className="block text-xs font-medium text-mf-navy-900">Categorie</label>
-                <input name="category" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm" />
+                <label htmlFor="grant_line_category" className="block text-xs font-medium text-mf-navy-900">Categorie</label>
+                <input id="grant_line_category" name="category" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm" />
               </div>
               <div>
-                <label className="block text-xs font-medium text-mf-navy-900">Montant planifie</label>
+                <label htmlFor="grant_line_planned_amount" className="block text-xs font-medium text-mf-navy-900">Montant planifie</label>
                 <input
+                  id="grant_line_planned_amount"
                   type="number"
                   step="0.01"
                   min="0"
@@ -144,8 +153,8 @@ export default async function GrantDetailPage({ params }: PageProps) {
                 />
               </div>
               <div className="col-span-2">
-                <label className="block text-xs font-medium text-mf-navy-900">Notes (optionnel)</label>
-                <input name="notes" className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm" />
+                <label htmlFor="grant_line_notes" className="block text-xs font-medium text-mf-navy-900">Notes (optionnel)</label>
+                <input id="grant_line_notes" name="notes" className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm" />
               </div>
               <div className="col-span-2">
                 <button
@@ -173,24 +182,24 @@ export default async function GrantDetailPage({ params }: PageProps) {
             onSuccessMessage="Reception enregistree."
           >
             <div>
-              <label className="block text-xs font-medium text-mf-navy-900">Montant recu</label>
-              <input type="number" step="0.01" min="0.01" name="amount" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm" />
+              <label htmlFor="receipt_amount" className="block text-xs font-medium text-mf-navy-900">Montant recu</label>
+              <input id="receipt_amount" type="number" step="0.01" min="0.01" name="amount" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-mf-navy-900">Date de reception</label>
-              <input type="date" name="received_date" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm" />
+              <label htmlFor="receipt_date" className="block text-xs font-medium text-mf-navy-900">Date de reception</label>
+              <input id="receipt_date" type="date" name="received_date" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm" />
             </div>
             <div>
-              <label className="block text-xs font-medium text-mf-navy-900">Type de compte</label>
-              <select name="treasury_account_type" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm">
+              <label htmlFor="receipt_account_type" className="block text-xs font-medium text-mf-navy-900">Type de compte</label>
+              <select id="receipt_account_type" name="treasury_account_type" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm">
                 <option value="cash">Caisse</option>
                 <option value="bank">Banque</option>
                 <option value="mobile_money">Mobile money</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs font-medium text-mf-navy-900">Compte</label>
-              <select name="treasury_account_id" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm">
+              <label htmlFor="receipt_account_id" className="block text-xs font-medium text-mf-navy-900">Compte</label>
+              <select id="receipt_account_id" name="treasury_account_id" required className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm">
                 <option value="">—</option>
                 <optgroup label="Caisses">
                   {(cashAccounts ?? []).map((a) => (

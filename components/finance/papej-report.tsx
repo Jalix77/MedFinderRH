@@ -85,12 +85,12 @@ export function PapejReportGenerator({ grantId }: { grantId: string }) {
       <form action={handleSubmit} className="flex flex-wrap items-end gap-3">
         <input type="hidden" name="grant_id" value={grantId} />
         <div>
-          <label className="block text-xs font-medium text-mf-navy-900">Periode — du</label>
-          <input type="date" name="period_start" defaultValue={yearStart} required className="mt-1 rounded-lg border border-mf-border px-3 py-2 text-sm" />
+          <label htmlFor="period_start" className="block text-xs font-medium text-mf-navy-900">Periode — du</label>
+          <input id="period_start" type="date" name="period_start" defaultValue={yearStart} required className="mt-1 rounded-lg border border-mf-border px-3 py-2 text-sm" />
         </div>
         <div>
-          <label className="block text-xs font-medium text-mf-navy-900">au</label>
-          <input type="date" name="period_end" defaultValue={today} required className="mt-1 rounded-lg border border-mf-border px-3 py-2 text-sm" />
+          <label htmlFor="period_end" className="block text-xs font-medium text-mf-navy-900">au</label>
+          <input id="period_end" type="date" name="period_end" defaultValue={today} required className="mt-1 rounded-lg border border-mf-border px-3 py-2 text-sm" />
         </div>
         <button
           type="submit"
