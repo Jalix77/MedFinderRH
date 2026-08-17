@@ -1,16 +1,24 @@
 # Phase 1C — Rapport de clôture
 
-Statut : **VALIDÉE FONCTIONNELLEMENT — CLÔTURE FINALE EN ATTENTE DE LA
-RÉ-EXÉCUTION MANUELLE DES SECURITY/PERFORMANCE ADVISORS PAR JEAN ALIX
-PIERRE ET D'UNE CONFIRMATION FINALE PROPRE DE LA SUITE COMPLÈTE, ACTUELLEMENT
-BLOQUÉE PAR LE RATE LIMITING SUPABASE AUTH (voir §21)**. Backend, UI, export
-PDF PAPEJ et hardening cloud (5+23 avertissements Security Advisor, 74
-avertissements Performance Advisor) sont tous livrés et vérifiés avec
-preuve — voir §19-21 pour le détail complet ajouté suite aux exports réels
-fournis par Jean Alix Pierre. Ce document couvre trois volets : le socle
-backend (§1-11, inchangé depuis le rapport intermédiaire du 15/08/2026),
-l'interface Phase 1C-UI (§12-17, 15/08-16/08/2026) et le hardening cloud +
-export PDF (§19-22, nouveau — 16/08/2026).
+> **⚠️ SEULE SECTION DE STATUT FAISANT FOI : §25.** Ce document a été
+> rédigé en plusieurs passes (15, 16 et 17/08/2026). Toute affirmation de
+> statut *global* antérieure à §25 — y compris le paragraphe qui suivait
+> ici avant le 17/08, les décomptes de tests "170" (§16) et "106" (§9), le
+> tableau "240/255 confirmés... rejeu combiné en attente" (§22), la
+> mention "PDF non construit" (§6/§17, sections déjà historiques), et
+> "Advisors non re-vérifiés" (§10, désormais partiellement caduc) — est
+> **remplacée** par §25 et ne doit plus être citée comme état actuel. Ces
+> sections restent en place pour leur valeur d'historique/preuve locale
+> (ex. le détail des correctifs eux-mêmes reste exact), mais aucune ne
+> décrit plus l'état global du projet. §24 ("Prochaine étape") est de même
+> remplacée par §25.
+
+Ce document couvre quatre volets, dans l'ordre chronologique où ils ont
+été produits : le socle backend (§1-11, 15/08/2026), l'interface Phase
+1C-UI (§12-17, 15-16/08/2026), le hardening cloud + export PDF (§19-24,
+16/08/2026) et la clôture des trois derniers points exigés avant toute
+Phase 1D/2 — hermétisme des fixtures, rejeu complet propre, Advisors
+(§25, 17/08/2026).
 
 ## 1. Rappel du périmètre approuvé (backend)
 
@@ -201,15 +209,15 @@ npm run test:unit            # 61/61 (43 pre-existants + 18 nouveaux : formatMon
 Backend : 65/65 tests d'intégration Phase 1C (§7-8). UI : 10/10 tests de
 visibilité par rôle + 13/13 tests E2E Playwright (§16).
 
-> **Correction (16/08/2026 soir, voir §22)** : le total "170 tests"
-> initialement affirmé ici ne se reconciliait pas arithmétiquement
+> **Correction (16/08/2026 soir) — SUPERSEDÉE, voir §25** : le total "170
+> tests" initialement affirmé ici ne se reconciliait pas arithmétiquement
 > (65+10+13+18 = 106, pas 170) — erreur signalée par Jean Alix Pierre.
-> **§22 contient désormais le tableau exact, par suite, reconcilié avec
-> les sorties réellement observées** (18 fichiers d'intégration + 7
-> fichiers unitaires + 7 fichiers E2E rejoués individuellement), incluant
-> les tests ajoutés par le hardening cloud (§20). Ce paragraphe est
-> conservé tel quel pour l'historique ; ne pas citer son "106" ni l'ancien
-> "170" — seul le tableau de §22 fait foi.
+> §22 avait ensuite produit un tableau à 255 tests mais avec 15/17 puis
+> 17/17 E2E confirmés seulement sur des rejeux successifs, jamais en une
+> seule passe continue. **§25 contient désormais le décompte définitif
+> (255/255, chaque suite verte en une seule passe continue).** Ce
+> paragraphe est conservé tel quel pour l'historique ; ne citer ni "106",
+> ni "170", ni le "240/255" de §22 — seul §25 fait foi.
 
 Scan secrets : `git grep eyJhbGci` → aucune occurrence hors faux positifs
 déjà connus dans les rapports de clôture précédents (texte descriptif,
@@ -396,9 +404,12 @@ Rejeu isolé des 2 fichiers concernés après une courte pause :
 **28/28 verts**. Total final confirmé : **142 + 28 = 170 tests
 d'intégration/E2E**, tous verts.
 
-> **Correction (16/08/2026 soir, voir §22)** : ce "170" ne se réconciliait
-> pas avec le détail par fichier ni avec §9 (106) — deux totaux différents
-> et tous deux faux. **§22 contient le tableau exact et définitif.**
+> **Correction (16/08/2026 soir) — SUPERSEDÉE, voir §25** : ce "170" ne se
+> réconciliait pas avec le détail par fichier ni avec §9 (106) — deux
+> totaux différents et tous deux faux. §22 avait ensuite produit
+> "240/255" (rejeu combiné incomplet, 2 échecs E2E persistants). **§25
+> contient le décompte définitif : 255/255, chaque suite verte en une
+> seule passe continue.**
 
 ## 17. Risques restants et dette technique (récapitulatif final)
 
@@ -824,7 +835,16 @@ d'intégration contre ce projet cloud dans l'heure suivant cette session,
 le temps que le quota se régénère naturellement côté Supabase, avant toute
 vérification finale complémentaire.
 
-## 22. Décompte exact des tests — table de réconciliation finale
+## 22. Décompte exact des tests — état au 16/08/2026 soir (SUPERSEDÉE, voir §25)
+
+> **Cette section est historique.** Elle documente honnêtement l'état
+> intermédiaire du 16/08/2026 soir (240/255 confirmés, rejeu combiné de
+> l'intégration jamais bouclé en une seule passe à cause du rate limiting
+> Supabase Auth, 2 échecs E2E persistants dont la cause a ensuite été
+> corrigée). **Le décompte définitif, avec les 255/255 confirmés en une
+> seule passe continue par suite, est en §25.** Conservée pour la
+> traçabilité du diagnostic (§21 reste la description exacte du rate
+> limiting rencontré et du diagnostic des 2 échecs E2E, toujours valide).
 
 Le "170" de §16 et le "106" de §9 étaient **tous deux faux** : ni l'un ni
 l'autre ne se réconcilie avec le détail réel par fichier
@@ -888,7 +908,7 @@ grossir indéfiniment. Non corrigée ce soir (portée hors du hardening
 RLS/PDF demandé), documentée comme dette explicite plutôt que
 dissimulée.
 
-## 23. Risques restants et dette technique (mise à jour finale)
+## 23. Risques restants et dette technique (état au 16/08/2026 soir — voir §25 pour l'état à jour)
 
 Remplace §17 (conservé pour l'historique) :
 
@@ -896,9 +916,9 @@ Remplace §17 (conservé pour l'historique) :
 |---|---|---|
 | `grant_expenses` à allocation multi-lignes non construit | §6 | Revisiter si le besoin réel émerge |
 | `auth_leaked_password_protection` non activé | §20.3 — hors de portée technique (réglage dashboard, pas SQL) | **Action manuelle requise de votre part** — chemin exact fourni |
-| Confirmation finale unique et propre de la suite complète (255 tests) | §21-22 — bloquée par le rate limiting Supabase Auth cumulé sur cette session, pas par un défaut ; chaque test confirmé vert individuellement | Rejouer `npm run test:integration` + `npx playwright test` en une seule passe après une pause (~1h recommandée) |
-| **Nouvelle dette découverte ce soir** : les fixtures d'intégration/E2E ne nettoient pas systématiquement leurs données (`afterAll` incomplet) — plus de 300 lignes budgétaires accumulées dans l'organisation de démo partagée sur la durée de cette session, ralentissant mesurablement les pages avec un grand menu déroulant (`/depenses/nouvelle`) et provoquant 2 échecs E2E persistants (§21) | Cause racine confirmée par inspection manuelle (backend rapide et correct, dropdown HTML à 300+ options) — pas une régression de sécurité | Ajouter un nettoyage systématique (`afterAll`) à toutes les fixtures de test qui créent des lignes budgétaires/financements, ou purger périodiquement l'organisation de démo cloud |
-| Relance manuelle des Security/Performance Advisors par vous | §20.5 | Comparer le nouvel export au tableau de réconciliation §20.5, partager si un écart apparaît |
+| Confirmation finale unique et propre de la suite complète (255 tests) | §21-22 — bloquée par le rate limiting Supabase Auth cumulé sur cette session, pas par un défaut ; chaque test confirmé vert individuellement | ✅ **RÉSOLU le 17/08/2026, voir §25** — rejeu de chaque suite en une seule passe continue, 255/255 |
+| **Nouvelle dette découverte ce soir** : les fixtures d'intégration/E2E ne nettoient pas systématiquement leurs données (`afterAll` incomplet) — plus de 300 lignes budgétaires accumulées dans l'organisation de démo partagée sur la durée de cette session, ralentissant mesurablement les pages avec un grand menu déroulant (`/depenses/nouvelle`) et provoquant 2 échecs E2E persistants (§21) | Cause racine confirmée par inspection manuelle (backend rapide et correct, dropdown HTML à 300+ options) — pas une régression de sécurité | ✅ **RÉSOLU le 17/08/2026, voir §25** — mécanisme d'hermétisme (`FixtureRegistry`) + nettoyage rétroactif des fixtures historiques |
+| Relance manuelle des Security/Performance Advisors par vous | §20.5 | **Toujours en attente — voir §25**, seul point encore bloquant |
 | `payer_is_approver` non testé en pratique côté backend | Hérité du rapport intermédiaire — nécessite une session AAL2 pour poser un `permission_override` de test | Non bloquant, dette de test documentée |
 | Docker local non confirmé | §11 | Confirmer avant prochaine session locale, puis rejouer `db reset` + `npm test` en local |
 | Accessibilité : sweep des labels non exhaustif | §15 point 3 — corrigé sur les formulaires de création/action principaux ; quelques champs secondaires gardent un placeholder sans `htmlFor` dédié | Sweep complémentaire recommandé, non bloquant (contenu descriptif présent) |
@@ -912,10 +932,15 @@ technique, l'autre une limite d'infrastructure de test déjà rencontrée et
 documentée trois fois dans ce projet — ni l'une ni l'autre ne cache un
 écart d'autorisation non testé.
 
-## 24. Prochaine étape (remplace §18)
+## 24. Prochaine étape (16/08/2026 soir — SUPERSEDÉE, voir §25)
 
-**Statut : VALIDÉE FONCTIONNELLEMENT — CLÔTURE FINALE EN ATTENTE DE VOUS
-SUR DEUX POINTS PRÉCIS**, comme annoncé en tête de ce document :
+> Cette section décrivait l'état au 16/08/2026 soir, avant que les points
+> 1 et 2 ci-dessous ne soient traités le 17/08/2026. **§25 est l'état à
+> jour.** Conservée telle quelle pour l'historique.
+
+**Statut (historique) : VALIDÉE FONCTIONNELLEMENT — CLÔTURE FINALE EN
+ATTENTE DE VOUS SUR DEUX POINTS PRÉCIS**, comme annoncé en tête de ce
+document :
 
 1. **Activer manuellement "Leaked password protection"** dans le
    dashboard Supabase (§20.3) — la seule action que je ne peux pas
@@ -942,3 +967,159 @@ propres, `git status` propre après commit.
 **Aucune ligne de Phase 1D ni Phase 2 n'a été commencée.** Je m'arrête ici
 pour votre validation explicite des deux points ci-dessus avant de
 déclarer Phase 1C totalement close.
+
+---
+
+# 25. STATUT FINAL CONSOLIDÉ (17/08/2026) — SEULE SECTION DE STATUT FAISANT FOI
+
+Cette section répond point par point aux trois conditions posées avant
+toute Phase 1D/Phase 2 : hermétisme des fixtures (corriger, pas
+documenter), rejeu complet propre en une seule passe par suite, et
+attente de votre rejeu manuel des Advisors. **Elle remplace toute
+affirmation de statut global des sections précédentes** (§9, §16, §18,
+§20.5 conclusion, §22, §23, §24 — chacune annotée d'un renvoi ici).
+
+## 25.1 — Point 1 : hermétisme des fixtures — RÉSOLU (corrigé, pas documenté)
+
+**Mécanisme** (`tests/support/fixture-registry.ts`, framework-agnostic,
+partagé Vitest/Playwright) :
+
+- `TEST_FIXTURE_MARKER = '[TEST-FIXTURE]'` / `tag(label)` — marque non
+  ambiguë apposée sur tout champ texte identifiant créé par un test,
+  distinguable à l'œil nu (dashboard, PDF, CSV) d'une donnée réelle.
+- `FixtureRegistry.track()/trackMany()` — enregistré **immédiatement**
+  après chaque insertion réussie, avant toute assertion pouvant échouer :
+  même si un test s'arrête en erreur en cours de route, tout ce qui a
+  réellement été créé jusque-là reste suivi.
+- `trackDerivedFrom()` — pour les lignes créées **indirectement** par une
+  RPC de workflow (`budget_commitments`, `budget_transfers`,
+  `cash_movements`, `journal_entries`...), interrogées uniquement par les
+  identifiants que le test a lui-même déjà créés — jamais une recherche
+  large.
+- `cleanup()` — suppression dans l'ordre **strictement inverse** de la
+  création (correct vis-à-vis des FK par construction, un enfant est
+  toujours créé après son parent), par lots groupés par table pour rester
+  sous le `hookTimeout`, best-effort par lot (un échec de nettoyage ne
+  fait jamais échouer le test lui-même). Appelé depuis `afterAll`
+  (intégration) ou `finally` (E2E) — jamais conditionnellement au succès
+  du test.
+- **Aucune suppression heuristique ni par ancienneté, jamais de purge
+  globale de l'organisation réelle** — respecté par construction : le
+  registre ne connaît que les identifiants exacts que CE test a
+  lui-même créés ou dérivés.
+
+**Retrofit complet** : `tests/e2e/fixtures.ts` + 6 specs E2E
+(`budget-workflow`, `expense-workflow`, `errors-empty-states`,
+`papej-workflow`, `papej-pdf-export`, plus `treasury-workflow`/
+`mobile-nav` qui ne créent aucune fixture) + 5 fichiers d'intégration
+(`accounting-core`, `budget`, `expense-creator-visibility`, `expenses`,
+`papej`).
+
+**Nettoyage rétroactif** (`scripts/cleanup-legacy-test-fixtures.mjs`,
+`--dry-run` supporté) : correspondance **exacte** de préfixes littéraux
+dérivés du code source des tests (`fiscal_years.label LIKE 'E2E-%'`,
+`'BUD-%'`, `'PAPEJ-%'`, etc.), scopée aux seules organisations de
+démo (Org A/B), suppression en ordre FK-safe. **1728+ lignes supprimées,
+`budget_lines` 356→0.** Limite structurelle rencontrée et documentée, pas
+une dette : une fois une écriture comptable `posted`, elle (et le plan
+comptable/les périodes qu'elle référence) est **immuable même via
+`service_role`** — vérifié explicitement par les tests
+d'`accounting-core.test.ts` eux-mêmes. Le reliquat non supprimable
+(~64 `fiscal_years`, ~600+ `chart_of_accounts`) est cette garantie
+d'intégrité comptable, pas un oubli de nettoyage.
+
+**Bug auto-infligé trouvé et corrigé pendant ce travail** : le marqueur
+initial utilisait des crochets Unicode (`⟦⟧`, U+27E6/27E7), hors de
+l'encodage WinAnsi utilisé par `pdf-lib` — faisait planter (500) toute
+génération de PDF PAPEJ pour un financement tagué. Corrigé par un
+marqueur ASCII (`[TEST-FIXTURE]`) + durcissement générique de
+`winAnsiSafe()` dans `lib/pdf/papej-report.ts` (défense en profondeur
+pour tout caractère hors WinAnsi, y compris une saisie utilisateur
+réelle future).
+
+Commits : `aa2a171` (mécanisme + retrofit + nettoyage rétroactif),
+`79322f1` (marqueur ASCII + `winAnsiSafe`), `85456f0` (marge de timeout
+E2E alignée, trouvée pendant la reconfirmation — voir §25.2).
+
+## 25.2 — Point 2 : rejeu complet, une seule passe continue par suite — RÉSOLU
+
+Exigence explicite : *"Je ne veux plus une combinaison de « vert
+individuellement » + « échec en exécution groupée »."* Chaque suite
+ci-dessous a été rejouée **dans une seule commande, sans interruption,
+sans rejeu partiel** :
+
+| Suite | Commande | Résultat | Détail |
+|---|---|---:|---|
+| Unitaire | `npx vitest run tests/unit` | **61/61** | 7 fichiers, 27.4s, aucun appel réseau |
+| Intégration | `npx vitest run tests/integration` | **177/177** | 18 fichiers, une seule passe continue, 525.98s |
+| E2E Playwright | `npx playwright test --reporter=list` | **17/17** | 7 fichiers (dont `mobile-nav` en projet séparé), une seule passe isolée (aucun process Vitest concurrent), 3.5min |
+| **Total** | | **255/255** | Aucun échec, aucune combinaison "vert isolé / rouge groupé" |
+
+La première tentative de rejeu de l'intégration après le hardening
+`auth_rls_initplan` avait été interrompue par un incident réseau
+transitoire (`TypeError: fetch failed`, cascade sur 16/18 fichiers) —
+confirmé transitoire par un test de connectivité direct (`curl`, réponse
+normale quelques instants plus tard), pas une régression ; le rejeu
+suivant a été **complet et propre du premier coup**.
+
+Chaîne de vérification complémentaire, un seul passage final après tous
+les correctifs de ce document :
+
+```bash
+npx tsc --noEmit     # 0 erreur
+npm run lint          # 0 erreur, 0 avertissement
+npm run build          # succes, 24 routes (identique a §21)
+git grep eyJhbGci       # 0 resultat reel (2 occurrences : mentions
+                          #   descriptives dans ce rapport et phase-1a,
+                          #   deja connues comme faux positifs, pas des
+                          #   cles)
+git grep SUPABASE_SERVICE_ROLE_KEY   # 0 cle en clair, uniquement des
+                                        #   noms de variable/placeholders
+git status              # propre — tous les commits de ce hardening deja
+                          #   atomiques (aa2a171, 79322f1, 85456f0)
+```
+
+La dette "plus de 300 lignes budgétaires accumulées" (§21-23) est donc
+**résolue à la fois par construction** (le mécanisme d'hermétisme
+empêche toute réaccumulation future) **et rétroactivement** (nettoyage
+des fixtures historiques déjà exécuté, §25.1).
+
+## 25.3 — Point 3 : Advisors — EN ATTENTE DE VOUS (statut inchangé)
+
+**Ceci reste le seul point bloquant la clôture définitive de Phase 1C.**
+Rien de nouveau ici depuis §20.5/§24 : j'attends toujours, de votre part :
+
+1. **Activation manuelle de "Leaked Password Protection"** dans le
+   dashboard Supabase (Authentication → Providers/Policies → Password).
+   **Précision importante, déjà actée suite à votre remarque** : ceci
+   n'est **pas une faille de l'application MedFinder Gestion**. C'est une
+   fonctionnalité de Supabase Auth **indisponible sur le plan Free** de
+   ce projet — aucun code ni migration SQL ne peut l'activer depuis cet
+   environnement, quel que soit l'effort. Elle doit être activée **au
+   moment du passage au plan Pro**, avant toute mise en production
+   exposant des données financières sensibles à de vrais utilisateurs
+   (détail et lien de documentation exact en §20.3, inchangé).
+2. **Relance manuelle du Security Advisor ET du Performance Advisor**
+   depuis le dashboard, et partage des nouveaux exports — pour
+   confirmation indépendante que les 102 avertissements corrigés (tableau
+   de réconciliation exact en §20.5) ont effectivement disparu.
+
+**Je ne déclare pas — et ne déclarerai pas — les 102 avertissements
+"disparus" avant cette confirmation réelle de votre part.** Tout ce qui
+était vérifiable sans accès dashboard authentifié a été vérifié en
+direct contre la base cloud réelle (fonctions `debug_*`, voir §20.1/§20.2/
+§20.4) ; ce n'est pas un substitut à votre propre relance du Advisor.
+
+## 25.4 — Synthèse
+
+| Condition posée avant Phase 1D/2 | Statut |
+|---|---|
+| 1. Hermétisme des fixtures (corrigé, pas documenté) | ✅ **Résolu** — §25.1 |
+| 2. Rejeu complet, une seule passe continue, environnement propre, 255/255 | ✅ **Résolu** — §25.2 |
+| 3. Rejeu manuel des Advisors par vous, confirmation des 102 avertissements | ⏳ **En attente de vous** — §25.3 |
+
+**Phase 1C reste ouverte.** Les points 1 et 2 sont clos de mon côté avec
+preuve vérifiable ; le point 3 dépend d'une action que je ne peux pas
+accomplir moi-même. **Aucune ligne de Phase 1D ni de Phase 2 n'a été
+commencée** et ne le sera pas avant votre confirmation explicite sur ce
+dernier point.
