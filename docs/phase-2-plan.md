@@ -304,46 +304,33 @@ attendue de leur résultat).
 
 ### 2B — États financiers (lecture seule)
 
+**Plan détaillé séparé : voir `docs/phase-2b-plan.md`** (rédigé le
+17/08/2026, après clôture de 2A, incluant l'exigence supplémentaire de
+Jean Alix Pierre : réconciliation inter-états testée automatiquement).
+Le résumé ci-dessous est conservé pour l'historique mais **une décision
+de conception y a été corrigée** : `v_cash_flow` n'est **plus** sourcée
+depuis `cash_movements` — cela violerait l'exigence explicite "les
+chiffres doivent être dérivés exclusivement des écritures comptables
+postées, jamais directement des modules métier". Le flux de trésorerie
+est désormais dérivé de `journal_entry_lines` filtrées aux comptes de
+trésorerie (identifiés via `cash_accounts`/`bank_accounts`/
+`mobile_money_accounts.gl_account_id`, pas par code compte codé en dur)
+— voir `docs/phase-2b-plan.md` §3 pour le détail complet.
+
 **Objectif** : générer les 6 états financiers listés, **exclusivement à
 partir de `journal_entries`/`journal_entry_lines` déjà postées** —
 jamais une saisie indépendante (cohérent avec `accounting-design.md`
 §10).
 
-**Tables** : aucune nouvelle table de données. Vues SQL
-`security_invoker` (même patron que `budget_line_balances` en 1C.3,
-déjà audité/testé pour l'isolation organisationnelle) :
-- `v_general_ledger` (grand livre — mouvements par compte)
-- `v_journal_report` (journal général — mouvements par journal,
-  chronologique)
-- `v_trial_balance` (balance générale — soldes débit/crédit par compte)
-- `v_income_statement` (compte de résultat — agrégation par `type IN
-  ('revenue','expense')`)
-- `v_balance_sheet` (bilan — agrégation par `type IN
-  ('asset','liability','equity')`)
-- `v_cash_flow` (flux de trésorerie — à partir de `cash_movements`,
-  pas de `journal_entries`, cohérent avec la distinction trésorerie vs
-  comptabilité déjà en place)
-
 **Permissions** : `accounting.view` (déjà seedée, déjà accordée).
 Aucune nouvelle.
 
-**RLS** : `security_invoker` + policy `using` reprenant
-`accounting.view`, exactement le patron `budget_line_balances` déjà
-prouvé en production.
-
-**UI** : `/comptabilite/rapports`, filtrable par période/exercice,
-export CSV (réutilise le patron déjà en place pour PAPEJ) — **export
-PDF différé sauf si vous le demandez explicitement** (leçon Phase 1C :
-ne pas ajouter de scope non demandé).
-
 **Tests** : exactitude arithmétique de chaque état contre des écritures
-de test connues (même discipline que
-`papej.test.ts`/`accounting-core.test.ts`), isolation multi-org sur
-chaque vue, compte de résultat et bilan cohérents entre eux
-(résultat net du compte de résultat = variation des capitaux propres du
-bilan — invariant comptable à tester explicitement).
-
-**Migrations** : `20260818090002_financial_statement_views.sql`.
+de test connues, isolation multi-org, **et réconciliation inter-états
+testée automatiquement** (balance générale ↔ grand livre ↔ journal
+général ↔ compte de résultat ↔ bilan, Actif = Passif + Capitaux
+Propres + Résultat non clôturé) — détail complet en
+`docs/phase-2b-plan.md`.
 
 ---
 
