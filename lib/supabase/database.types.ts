@@ -1494,6 +1494,103 @@ export type Database = {
           },
         ]
       }
+      journal_entry_approvals: {
+        Row: {
+          approver_id: string | null
+          comment: string | null
+          created_at: string
+          created_by: string | null
+          decided_at: string | null
+          decision: string | null
+          entry_id: string
+          exception_justification: string | null
+          exception_requested_by: string | null
+          exception_result: string | null
+          exception_validated_at: string | null
+          exception_validated_by: string | null
+          id: string
+          organization_id: string
+          sod_rule_violated: string | null
+        }
+        Insert: {
+          approver_id?: string | null
+          comment?: string | null
+          created_at?: string
+          created_by?: string | null
+          decided_at?: string | null
+          decision?: string | null
+          entry_id: string
+          exception_justification?: string | null
+          exception_requested_by?: string | null
+          exception_result?: string | null
+          exception_validated_at?: string | null
+          exception_validated_by?: string | null
+          id?: string
+          organization_id: string
+          sod_rule_violated?: string | null
+        }
+        Update: {
+          approver_id?: string | null
+          comment?: string | null
+          created_at?: string
+          created_by?: string | null
+          decided_at?: string | null
+          decision?: string | null
+          entry_id?: string
+          exception_justification?: string | null
+          exception_requested_by?: string | null
+          exception_result?: string | null
+          exception_validated_at?: string | null
+          exception_validated_by?: string | null
+          id?: string
+          organization_id?: string
+          sod_rule_violated?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "journal_entry_approvals_approver_id_fkey"
+            columns: ["approver_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journal_entry_approvals_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journal_entry_approvals_entry_id_fkey"
+            columns: ["entry_id"]
+            isOneToOne: false
+            referencedRelation: "journal_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journal_entry_approvals_exception_requested_by_fkey"
+            columns: ["exception_requested_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journal_entry_approvals_exception_validated_by_fkey"
+            columns: ["exception_validated_by"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "journal_entry_approvals_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       expenses: {
         Row: {
           commitment_id: string | null
@@ -2946,6 +3043,10 @@ export type Database = {
         Args: { p_comment?: string; p_decision: string; p_expense_id: string }
         Returns: Json
       }
+      approve_manual_journal_entry: {
+        Args: { p_comment?: string; p_decision: string; p_entry_id: string }
+        Returns: Json
+      }
       cancel_expense_request: {
         Args: { p_expense_id: string; p_reason: string }
         Returns: Json
@@ -2961,6 +3062,16 @@ export type Database = {
       }
       create_grant_budget_line: {
         Args: { p_category: string; p_grant_id: string; p_notes?: string; p_planned_amount: number }
+        Returns: Json
+      }
+      create_manual_journal_entry: {
+        Args: {
+          p_description: string
+          p_entry_date: string
+          p_journal_code: string
+          p_lines: Json
+          p_org_id: string
+        }
         Returns: Json
       }
       debug_unwanted_function_grants: {
@@ -3003,6 +3114,10 @@ export type Database = {
         Args: { p_expense_id: string; p_justification: string }
         Returns: Json
       }
+      request_manual_entry_approval_exception: {
+        Args: { p_entry_id: string; p_justification: string }
+        Returns: Json
+      }
       reverse_journal_entry: {
         Args: { p_entry_id: string; p_reason: string }
         Returns: Json
@@ -3011,12 +3126,20 @@ export type Database = {
         Args: { p_expense_id: string }
         Returns: Json
       }
+      submit_manual_journal_entry: {
+        Args: { p_entry_id: string }
+        Returns: Json
+      }
       transfer_budget_amount: {
         Args: { p_amount: number; p_from_line_id: string; p_reason: string; p_to_line_id: string }
         Returns: Json
       }
       validate_expense_approval_exception: {
         Args: { p_comment?: string; p_expense_id: string; p_result: string }
+        Returns: Json
+      }
+      validate_manual_entry_approval_exception: {
+        Args: { p_comment?: string; p_entry_id: string; p_result: string }
         Returns: Json
       }
     }

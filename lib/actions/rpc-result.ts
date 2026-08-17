@@ -24,6 +24,8 @@ const ERROR_MESSAGES: Record<string, string> = {
   invalid_status: "Cette action n'est pas possible dans l'etat actuel de la demande.",
   no_attachment: 'Au moins un justificatif doit etre deppose avant de comptabiliser.',
   entry_not_posted: "Cette ecriture n'est pas comptabilisee.",
+  journal_not_found: 'Journal comptable introuvable pour cette organisation.',
+  no_open_period: "Aucune periode comptable ouverte pour cette date — configurez d'abord l'exercice/periode correspondant.",
 }
 
 export function rpcErrorMessage(code: string): string {

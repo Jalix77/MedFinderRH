@@ -34,6 +34,9 @@ export async function createChartOfAccountAction(formData: FormData) {
   revalidatePath('/tresorerie')
   revalidatePath('/budget')
   revalidatePath('/papej')
+  // Reutilisee depuis /comptabilite (Phase 2A) — meme plan comptable
+  // partage entre tous les modules, aucune duplication de table/RPC.
+  revalidatePath('/comptabilite')
 }
 
 // --- Comptes de tresorerie -------------------------------------------------

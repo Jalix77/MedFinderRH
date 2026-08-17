@@ -101,7 +101,15 @@ describe('Phase 1C.1 — Comptabilite minimale', () => {
         period_id: periodId,
         entry_number: `TEST-JE-${Date.now()}-${Math.floor(Math.random() * 100000)}`,
         entry_date: '2026-06-15',
-        source_type: 'manual',
+        // 'expense', pas 'manual' : ce fichier teste les invariants
+        // generiques de posting/immutabilite/contre-passation, pas le
+        // workflow de saisie manuelle SoD (Phase 2A, manual-journal-
+        // entries.test.ts) — 'manual' declenche desormais l'exigence
+        // 'approved' avant comptabilisation (migration 20260818090003/4),
+        // ce que ces brouillons de test ne traversent jamais. N'importe
+        // quelle autre valeur du CHECK aurait ete correcte ici ; 'expense'
+        // reste la plus proche d'un cas reel generique.
+        source_type: 'expense',
         status: 'draft',
         description: tag('ecriture de test'),
       })

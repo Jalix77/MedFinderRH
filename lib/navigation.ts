@@ -30,6 +30,7 @@ export const NAV_ITEMS: NavItem[] = [
   { href: '/depenses', label: 'Depenses', permission: ['expense.view', 'expense.create'] },
   { href: '/budget', label: 'Budget', permission: 'budget.view' },
   { href: '/tresorerie', label: 'Tresorerie', permission: ['treasury.manage', 'accounting.view'] },
+  { href: '/comptabilite', label: 'Comptabilite', permission: 'accounting.view' },
   { href: '/papej', label: 'PAPEJ', permission: 'papej.view' },
   { href: '/settings/organization', label: 'Organisation', permission: 'settings.manage' },
   { href: '/settings/users', label: 'Utilisateurs & roles', permission: 'user.manage' },

@@ -32,6 +32,26 @@ const GENERIC_STATUS_LABELS: Record<string, string> = {
   revised: 'Revise',
 }
 
+// Ecritures manuelles (Phase 2A, docs/phase-2-plan.md §0.3) — vocabulaire
+// distinct des depenses meme si certains codes se recoupent (draft/
+// submitted/approved/rejected/posted), pour ne jamais afficher un statut
+// depense (committed/paid/justified/cancelled) qui n'existe pas ici.
+const JOURNAL_ENTRY_STATUS_LABELS: Record<string, string> = {
+  draft: 'Brouillon',
+  submitted: 'Soumise',
+  approved: 'Approuvee',
+  rejected: 'Rejetee',
+  posted: 'Comptabilisee',
+}
+
+const JOURNAL_ENTRY_STATUS_TONE: Record<string, Tone> = {
+  draft: 'neutral',
+  submitted: 'warning',
+  approved: 'info',
+  rejected: 'danger',
+  posted: 'success',
+}
+
 type Tone = 'neutral' | 'success' | 'warning' | 'danger' | 'info'
 
 const TONE_CLASSES: Record<Tone, string> = {
@@ -47,10 +67,13 @@ const TONE_CLASSES: Record<Tone, string> = {
  * codes techniques bruts. `domain="expense"` utilise le vocabulaire du
  * workflow depense ; sinon repli sur un mapping generique (actif/ferme/...).
  */
-export function StatusBadge({ status, domain }: { status: string; domain?: 'expense' }) {
-  const label =
-    (domain === 'expense' ? EXPENSE_STATUS_LABELS[status] : undefined) ?? GENERIC_STATUS_LABELS[status] ?? status
-  const tone: Tone = (domain === 'expense' ? EXPENSE_STATUS_TONE[status] : undefined) ?? 'neutral'
+export function StatusBadge({ status, domain }: { status: string; domain?: 'expense' | 'journal_entry' }) {
+  const domainLabels =
+    domain === 'expense' ? EXPENSE_STATUS_LABELS : domain === 'journal_entry' ? JOURNAL_ENTRY_STATUS_LABELS : undefined
+  const domainTones =
+    domain === 'expense' ? EXPENSE_STATUS_TONE : domain === 'journal_entry' ? JOURNAL_ENTRY_STATUS_TONE : undefined
+  const label = domainLabels?.[status] ?? GENERIC_STATUS_LABELS[status] ?? status
+  const tone: Tone = domainTones?.[status] ?? 'neutral'
 
   return (
     <span className={`inline-block rounded-full px-3 py-1 text-xs font-semibold ${TONE_CLASSES[tone]}`}>

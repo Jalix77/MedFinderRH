@@ -32,6 +32,9 @@ export async function createFiscalYearAction(formData: FormData) {
   if (error) throw new Error(error.message)
 
   revalidatePath('/budget')
+  // Reutilisee depuis /comptabilite (Phase 2A) — memes exercices comptables
+  // partages entre Budget et Comptabilite, aucune duplication de table/RPC.
+  revalidatePath('/comptabilite')
 }
 
 export async function createBudgetAction(formData: FormData) {
