@@ -1,5 +1,9 @@
 # Phase 1C — Rapport de clôture
 
+Statut : **PHASE 1C CLÔTURÉE OFFICIELLEMENT (17/08/2026)** — voir §25 pour
+le détail complet et les preuves. Aucune ligne de Phase 1D ni de Phase 2
+n'a été commencée.
+
 > **⚠️ SEULE SECTION DE STATUT FAISANT FOI : §25.** Ce document a été
 > rédigé en plusieurs passes (15, 16 et 17/08/2026). Toute affirmation de
 > statut *global* antérieure à §25 — y compris le paragraphe qui suivait
@@ -1084,42 +1088,154 @@ La dette "plus de 300 lignes budgétaires accumulées" (§21-23) est donc
 empêche toute réaccumulation future) **et rétroactivement** (nettoyage
 des fixtures historiques déjà exécuté, §25.1).
 
-## 25.3 — Point 3 : Advisors — EN ATTENTE DE VOUS (statut inchangé)
+## 25.3 — Point 3 : rejeu manuel des Advisors par Jean Alix Pierre — REÇU ET INTÉGRÉ
 
-**Ceci reste le seul point bloquant la clôture définitive de Phase 1C.**
-Rien de nouveau ici depuis §20.5/§24 : j'attends toujours, de votre part :
+Vous avez relancé les deux Advisors depuis le dashboard Supabase et
+transmis les résultats le 17/08/2026 :
 
-1. **Activation manuelle de "Leaked Password Protection"** dans le
-   dashboard Supabase (Authentication → Providers/Policies → Password).
-   **Précision importante, déjà actée suite à votre remarque** : ceci
-   n'est **pas une faille de l'application MedFinder Gestion**. C'est une
-   fonctionnalité de Supabase Auth **indisponible sur le plan Free** de
-   ce projet — aucun code ni migration SQL ne peut l'activer depuis cet
-   environnement, quel que soit l'effort. Elle doit être activée **au
-   moment du passage au plan Pro**, avant toute mise en production
-   exposant des données financières sensibles à de vrais utilisateurs
-   (détail et lien de documentation exact en §20.3, inchangé).
-2. **Relance manuelle du Security Advisor ET du Performance Advisor**
-   depuis le dashboard, et partage des nouveaux exports — pour
-   confirmation indépendante que les 102 avertissements corrigés (tableau
-   de réconciliation exact en §20.5) ont effectivement disparu.
+- **Performance Advisor : 0 Errors / 0 Warnings / 115 Info.** Les 74
+  avertissements `auth_rls_initplan` (migration `090016`, §20.4) sont
+  donc confirmés disparus — 0 Warning restant, conforme à l'objectif.
+  Les 115 entrées de niveau **Info** restant sont, par définition du
+  Performance Advisor, des suggestions d'optimisation non bloquantes
+  (index inutilisés, statistiques, etc.), jamais un problème de
+  correction/sécurité — hors du périmètre de ce hardening (aucune d'elles
+  ne faisait partie des 29+74 avertissements traités par ce document).
+- **Security Advisor : l'export ne contient plus `function_search_path_mutable`.**
+  Les 5 avertissements corrigés en §20.1 (migration `090014`) sont donc
+  confirmés disparus, de façon indépendante de ma propre vérification
+  structurelle (`debug_security_definer_without_search_path`, déjà vide
+  depuis le 16/08 et re-confirmée vide aujourd'hui, §25.5).
 
-**Je ne déclare pas — et ne déclarerai pas — les 102 avertissements
-"disparus" avant cette confirmation réelle de votre part.** Tout ce qui
-était vérifiable sans accès dashboard authentifié a été vérifié en
-direct contre la base cloud réelle (fonctions `debug_*`, voir §20.1/§20.2/
-§20.4) ; ce n'est pas un substitut à votre propre relance du Advisor.
+Ces deux confirmations sont traitées comme **source de vérité
+indépendante** — exactement ce que je demandais en §20.5/§24 avant de
+déclarer quoi que ce soit "disparu" moi-même.
 
-## 25.4 — Synthèse
+## 25.4 — `authenticated_security_definer_function_executable` (23 fonctions) — audit re-confirmé, risque accepté et documenté
+
+**Aucune fonction n'a été modifiée pour faire disparaître cet
+avertissement.** Il reste présent dans l'export Security Advisor (comme
+attendu — les 23 fonctions restent volontairement exécutables par
+`authenticated`) ; ce qui suit est la re-confirmation, aujourd'hui,
+**contre le SQL réellement déployé et contre les tests réellement
+rejoués**, des quatre critères posés :
+
+1. **Exposition à `authenticated` intentionnelle** — chacune des 23
+   fonctions porte un `grant execute on function ... to authenticated`
+   explicite dans sa migration source (vérifié ligne par ligne
+   aujourd'hui, ex. `admin_create_membership` :
+   `supabase/migrations/20260813100009_admin_rpc_functions.sql:73` ;
+   `commit_budget_line` : `20260815090004_budget.sql:316` ;
+   `generate_papej_report` : `20260815090006_papej.sql:413`) — ce n'est
+   ni un oubli ni un `GRANT` par défaut hérité, mais une ligne écrite
+   explicitement pour chacune.
+2. **`PUBLIC`/`anon` sans accès indu** — chacune porte aussi un
+   `revoke all on function ... from public` explicite immédiatement
+   avant son `grant`. Confirmé **structurellement, en direct, aujourd'hui**
+   (pas seulement supposé depuis le 16/08) : `debug_unwanted_function_grants('public')`
+   rejoué → **tableau vide** (aucune fonction du schéma `public`, donc a
+   fortiori aucune des 23, n'a d'`EXECUTE` accordé à `PUBLIC` ou `anon`).
+   Confirmation comportementale indépendante : `phase1c-anon-refusal.test.ts`
+   (14/14, rejoué aujourd'hui dans le passage 177/177 de §25.2) — chacune
+   des 14 RPC Phase 1C testées renvoie `42501` (permission denied,
+   `EXECUTE` absent) pour `anon`, jamais une exécution partielle.
+3. **`search_path` sécurisé** — chacune des 23 déclare
+   `set search_path = public, app_private[, ...]` explicitement dans sa
+   définition (vérifié aujourd'hui par relecture directe des 23
+   définitions dans leurs migrations source). Confirmé structurellement :
+   `debug_security_definer_without_search_path('public')` et
+   `('app_private')` rejouées aujourd'hui → **tableau vide dans les deux
+   cas**, aucune fonction `SECURITY DEFINER` du projet sans `search_path`
+   fixe.
+4. **Autorisation organisation/RBAC vérifiée dans la chaîne d'exécution**
+   — chacune des 23 vérifie `app_private.has_permission()` (ou
+   `is_super_admin()`/`has_role()` en alternative explicite) avec le code
+   de permission métier exact **avant** toute écriture, et dérive
+   l'organisation cible **de la ligne visée en base** (`select
+   organization_id into v_org_id from ... where id = p_...`), jamais d'un
+   paramètre `p_org_id` fourni tel quel par le client sans vérification —
+   IDOR impossible par construction. Exemple relu aujourd'hui
+   (`commit_budget_line`, `20260815090004_budget.sql:295-301`) :
+   l'organisation est lue depuis `budget_lines` via l'id de ligne fourni,
+   puis `has_permission(v_actor, v_org_id, 'budget.manage')` vérifiée
+   avant toute écriture dans `budget_commitments`. Confirmation
+   comportementale : `security-definer-audit.test.ts` (18/18, rejoué
+   aujourd'hui) — refus explicite `not_authorized` pour EMPLOYE sur les 7
+   `admin_*`, contrôle positif (admin autorisé réussit) — et l'ensemble
+   des suites métier (`expenses`, `budget`, `papej`, `accounting-core`,
+   177/177 rejouées aujourd'hui) qui exercent les 14 RPC Phase 1C sous
+   plusieurs rôles distincts avec le résultat attendu à chaque fois,
+   jamais une erreur `42501` pour un acteur authentifié légitime.
+
+**Outillage de re-vérification** (`scripts/verify-security-definer-final.mjs`,
+lecture seule, aucune modification de fonction) — rejoué en direct contre
+le cloud le 17/08/2026, résultat : les 4 vérifications structurelles ne
+trouvent aucun écart.
+
+**Conclusion : les 23 avertissements `authenticated_security_definer_function_executable`
+sont classés risque accepté et documenté**, pas une dette à corriger —
+conforme à la classification Catégorie A déjà posée en §20.2, re-confirmée
+aujourd'hui contre le SQL et les tests réels plutôt que réaffirmée sans
+nouvelle preuve.
+
+## 25.5 — `auth_leaked_password_protection` (1 avertissement) — limitation de plan, documentée séparément
+
+**Reste dans l'export Security Advisor — c'est attendu, pas un écart.**
+Comme déjà établi en §20.3 et confirmé par votre message : cette
+fonctionnalité de Supabase Auth (vérification de chaque mot de passe
+candidat contre l'API HaveIBeenPwned, par k-anonymat de préfixe de hash)
+est **indisponible sur le plan Free** du projet `qwydgqheceglulfxwtgo` —
+elle ne se résout ni par code applicatif ni par migration SQL. **Ce n'est
+pas un défaut de sécurité de MedFinder Gestion**, c'est une limite de
+palier d'infrastructure, documentée séparément des trois autres familles
+d'avertissements (qui, elles, sont soit corrigées soit un risque
+applicatif accepté).
+
+**Action différée, explicitement documentée pour le moment venu** — à
+faire lors du passage du projet à un **plan payant compatible
+(Pro ou supérieur)**, **avant toute mise en production exposant des
+données financières sensibles à de vrais utilisateurs** :
+
+1. Dashboard Supabase → projet `qwydgqheceglulfxwtgo` → **Authentication**
+   → **Providers**/**Policies** → section **Password**.
+2. Activer **"Leaked password protection"**.
+3. Référence :
+   `https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection`.
+
+## 25.6 — Table de réconciliation finale (29 + 74 = 103 avertissements)
+
+| Avertissement | Nombre | État au 17/08/2026 |
+|---|---:|---|
+| `function_search_path_mutable` | 5 | ✅ **Corrigé — confirmé absent de l'export Security Advisor du 17/08** (§25.3), en plus de la vérification structurelle directe (§25.4 point 3) |
+| `auth_rls_initplan` | 74 | ✅ **Corrigé — confirmé par Performance Advisor 0 Errors/0 Warnings/115 Info du 17/08** (§25.3) |
+| `authenticated_security_definer_function_executable` | 23 | ✅ **Risque accepté et documenté — ré-audit complet du 17/08 contre le SQL réel et les tests réels** (§25.4), aucune régression, aucune fonction modifiée pour faire taire l'avertissement |
+| `auth_leaked_password_protection` | 1 | ⏸️ **Limitation du plan Supabase Free, documentée séparément, action différée au passage sur plan payant compatible** (§25.5) — pas un défaut applicatif |
+| **Total** | **103** | **103/103 traités : 79 corrigés et vérifiés indépendamment, 23 audités et acceptés comme risque documenté, 1 limitation de plan documentée et différée — aucun avertissement ignoré ou laissé sans décision explicite** |
+
+## 25.7 — Synthèse et clôture officielle
 
 | Condition posée avant Phase 1D/2 | Statut |
 |---|---|
 | 1. Hermétisme des fixtures (corrigé, pas documenté) | ✅ **Résolu** — §25.1 |
 | 2. Rejeu complet, une seule passe continue, environnement propre, 255/255 | ✅ **Résolu** — §25.2 |
-| 3. Rejeu manuel des Advisors par vous, confirmation des 102 avertissements | ⏳ **En attente de vous** — §25.3 |
+| 3. Rejeu manuel des Advisors par vous, confirmation des 103 avertissements | ✅ **Reçu et intégré** — §25.3-§25.6 (Performance Advisor 0/0/115 ; Security Advisor sans `function_search_path_mutable` ; 23 `authenticated_security_definer_function_executable` re-audités et acceptés ; 1 `auth_leaked_password_protection` documenté comme limitation de plan, action différée) |
 
-**Phase 1C reste ouverte.** Les points 1 et 2 sont clos de mon côté avec
-preuve vérifiable ; le point 3 dépend d'une action que je ne peux pas
-accomplir moi-même. **Aucune ligne de Phase 1D ni de Phase 2 n'a été
-commencée** et ne le sera pas avant votre confirmation explicite sur ce
-dernier point.
+**Les trois conditions posées avant toute Phase 1D/Phase 2 sont
+désormais remplies. PHASE 1C EST OFFICIELLEMENT CLÔTURÉE (17/08/2026).**
+
+Ce que cette clôture couvre, avec preuve vérifiable à chaque étape :
+backend et UI complets (§1-18), export PDF PAPEJ (§19), hardening cloud
+initial des 103 avertissements Security/Performance Advisor (§20),
+vérification post-migration (§21), hermétisme des fixtures avec
+nettoyage rétroactif non-heuristique (§25.1), 255/255 tests confirmés en
+une seule passe continue par suite — unitaire, intégration, E2E — plus
+typecheck/lint/build/secrets/`git status` propres (§25.2), et
+confirmation indépendante par votre rejeu manuel des deux Advisors que
+79 des 103 avertissements ont disparu, que 23 restent un risque
+applicatif intentionnel et vérifié (pas une régression, pas une
+modification cosmétique), et que le dernier (mot de passe compromis) est
+une limitation de plan documentée et différée, pas un défaut (§25.3-§25.6).
+
+**Aucune ligne de Phase 1D ni de Phase 2 n'a été commencée**, et ne le
+sera pas sans une nouvelle autorisation explicite de votre part pour
+ouvrir cette phase suivante.
