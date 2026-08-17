@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { signInAs, signInAsElevated, adminClient, getOrgIdByName } from './helpers'
+import { FixtureRegistry, tag } from '../support/fixture-registry'
 
 /**
  * Phase 1C, sous-jalon 1C.5 — PAPEJ. Couvre le financement en base (montant
@@ -9,53 +10,91 @@ import { signInAs, signInAsElevated, adminClient, getOrgIdByName } from './helpe
  */
 describe('Phase 1C.5 — PAPEJ', () => {
   let orgA: string
+  // Hermeticite (suite au retour de Jean Alix Pierre) — voir
+  // tests/support/fixture-registry.ts. Meme limite structurelle
+  // qu'expenses.test.ts pour les receptions comptabilisees (POSTED,
+  // immuable par conception) : voir commentaire dans expenses.test.ts.
+  const registry = new FixtureRegistry()
 
   beforeAll(async () => {
     orgA = await getOrgIdByName('MedFinder Demo — Organisation A')
+  })
+
+  afterAll(async () => {
+    await registry.cleanup(adminClient())
   })
 
   async function setupGrantFixtures(orgId: string, label: string) {
     const admin = adminClient()
     const { data: fy } = await admin
       .from('fiscal_years')
-      .insert({ organization_id: orgId, label: `PAPEJ-${label}`, start_date: '2032-01-01', end_date: '2032-12-31' })
+      .insert({ organization_id: orgId, label: tag(`PAPEJ-${label}`), start_date: '2032-01-01', end_date: '2032-12-31' })
       .select('id')
       .single()
+    registry.track('fiscal_years', fy!.id as string)
+
     // record_grant_receipt() comptabilise via create_and_post_two_line_entry,
     // qui exige une periode ouverte pour la date de reception — toutes les
     // dates de test de ce fichier tombent dans l'annee 2032, donc les 12
     // mois suffisent (meme lecon que accounting-core.test.ts : ne pas
     // oublier la periode, seulement la fiscal_year, ne suffit pas).
-    await admin.from('accounting_periods').insert(
-      Array.from({ length: 12 }, (_, i) => ({ organization_id: orgId, fiscal_year_id: fy!.id, month: i + 1 }))
-    )
+    const { data: periods } = await admin
+      .from('accounting_periods')
+      .insert(Array.from({ length: 12 }, (_, i) => ({ organization_id: orgId, fiscal_year_id: fy!.id, month: i + 1 })))
+      .select('id')
+    registry.trackMany('accounting_periods', ((periods as { id: string }[] | null) ?? []).map((p) => p.id))
+
     const { data: revenueAccount } = await admin
       .from('chart_of_accounts')
-      .insert({ organization_id: orgId, code: `REV-GL-${label}`, label: 'Produit PAPEJ test', type: 'revenue' })
+      .insert({ organization_id: orgId, code: `REV-GL-${label}`, label: tag('Produit PAPEJ test'), type: 'revenue' })
       .select('id')
       .single()
+    registry.track('chart_of_accounts', revenueAccount!.id as string)
+
     const { data: cashGl } = await admin
       .from('chart_of_accounts')
-      .insert({ organization_id: orgId, code: `PAPEJ-CASH-GL-${label}`, label: 'Caisse PAPEJ test', type: 'asset' })
+      .insert({ organization_id: orgId, code: `PAPEJ-CASH-GL-${label}`, label: tag('Caisse PAPEJ test'), type: 'asset' })
       .select('id')
       .single()
+    registry.track('chart_of_accounts', cashGl!.id as string)
+
     const { data: cashAccount } = await admin
       .from('cash_accounts')
-      .insert({ organization_id: orgId, name: `Caisse PAPEJ ${label}`, gl_account_id: cashGl!.id, current_balance: 0 })
+      .insert({ organization_id: orgId, name: tag(`Caisse PAPEJ ${label}`), gl_account_id: cashGl!.id, current_balance: 0 })
       .select('id')
       .single()
+    registry.track('cash_accounts', cashAccount!.id as string)
+
     const { data: grant } = await admin
       .from('grants')
       .insert({
         organization_id: orgId,
-        name: `PAPEJ ${label}`,
+        name: tag(`PAPEJ ${label}`),
         donor_name: 'Bailleur Test',
         amount_granted: 850000,
         revenue_account_id: revenueAccount!.id,
       })
       .select('id')
       .single()
+    registry.track('grants', grant!.id as string)
+
     return { grantId: grant!.id as string, cashAccountId: cashAccount!.id as string }
+  }
+
+  /** A appeler apres record_grant_receipt reussi. */
+  async function trackAfterReceipt(grantId: string, journalEntryId?: string) {
+    await registry.trackDerivedFrom(adminClient(), 'cash_movements', 'reference_id', [grantId])
+    if (journalEntryId) {
+      registry.track('journal_entries', journalEntryId)
+      await registry.trackDerivedFrom(adminClient(), 'journal_entry_lines', 'entry_id', [journalEntryId])
+    }
+  }
+
+  /** A appeler apres create_grant_budget_line reussi. */
+  async function trackAfterGrantBudgetLine(grantId: string, budgetLineId: string, grantBudgetLineId: string) {
+    await registry.trackDerivedFrom(adminClient(), 'budgets', 'source_id', [grantId])
+    registry.track('budget_lines', budgetLineId)
+    registry.track('grant_budget_lines', grantBudgetLineId)
   }
 
   describe('Financement (RLS + montant accorde/recu distincts)', () => {
@@ -63,17 +102,20 @@ describe('Phase 1C.5 — PAPEJ', () => {
       const { client } = await signInAs('comptable.demo@medfinder.test')
       const { data: revenueAccount } = await adminClient()
         .from('chart_of_accounts')
-        .insert({ organization_id: orgA, code: `REV-RLS-${Date.now()}`, label: 'Produit', type: 'revenue' })
+        .insert({ organization_id: orgA, code: `REV-RLS-${Date.now()}`, label: tag('Produit'), type: 'revenue' })
         .select('id')
         .single()
+      registry.track('chart_of_accounts', revenueAccount!.id as string)
+
       const { data, error } = await client
         .from('grants')
-        .insert({ organization_id: orgA, name: `RLS-${Date.now()}`, amount_granted: 850000, revenue_account_id: revenueAccount!.id })
-        .select('amount_granted, amount_received')
+        .insert({ organization_id: orgA, name: tag(`RLS-${Date.now()}`), amount_granted: 850000, revenue_account_id: revenueAccount!.id })
+        .select('id, amount_granted, amount_received')
         .single()
       expect(error).toBeNull()
       expect(Number(data?.amount_granted)).toBe(850000)
       expect(Number(data?.amount_received)).toBe(0)
+      if (data?.id) registry.track('grants', data.id as string)
     })
 
     it('MANAGER (sans papej.manage) ne peut pas creer de financement', async () => {
@@ -113,6 +155,8 @@ describe('Phase 1C.5 — PAPEJ', () => {
       })
       expect(error).toBeNull()
       expect((data as { success: boolean })?.success).toBe(true)
+      const entryId = (data as { journal_entry_id: string }).journal_entry_id
+      await trackAfterReceipt(grantId, entryId)
 
       const admin = adminClient()
       const { data: grant } = await admin.from('grants').select('amount_granted, amount_received').eq('id', grantId).single()
@@ -122,7 +166,6 @@ describe('Phase 1C.5 — PAPEJ', () => {
       const { data: cash } = await admin.from('cash_accounts').select('current_balance').eq('id', cashAccountId).single()
       expect(Number(cash?.current_balance)).toBe(300000)
 
-      const entryId = (data as { journal_entry_id: string }).journal_entry_id
       const { data: entry } = await admin.from('journal_entries').select('status').eq('id', entryId).single()
       expect(entry?.status).toBe('posted')
     })
@@ -130,14 +173,16 @@ describe('Phase 1C.5 — PAPEJ', () => {
     it('deux receptions cumulent amount_received sans ecraser amount_granted', async () => {
       const { grantId, cashAccountId } = await setupGrantFixtures(orgA, `cumul${Date.now()}`)
       const { client } = await signInAs('comptable.demo@medfinder.test')
-      await client.rpc('record_grant_receipt', {
+      const { data: r1 } = await client.rpc('record_grant_receipt', {
         p_grant_id: grantId, p_amount: 200000, p_received_date: '2032-03-01',
         p_treasury_account_type: 'cash', p_treasury_account_id: cashAccountId,
       })
-      await client.rpc('record_grant_receipt', {
+      const { data: r2 } = await client.rpc('record_grant_receipt', {
         p_grant_id: grantId, p_amount: 150000, p_received_date: '2032-04-01',
         p_treasury_account_type: 'cash', p_treasury_account_id: cashAccountId,
       })
+      await trackAfterReceipt(grantId, (r1 as { journal_entry_id: string })?.journal_entry_id)
+      await trackAfterReceipt(grantId, (r2 as { journal_entry_id: string })?.journal_entry_id)
       const admin = adminClient()
       const { data: grant } = await admin.from('grants').select('amount_granted, amount_received').eq('id', grantId).single()
       expect(Number(grant?.amount_received)).toBe(350000)
@@ -163,12 +208,13 @@ describe('Phase 1C.5 — PAPEJ', () => {
       const { client } = await signInAs('comptable.demo@medfinder.test')
       const { data, error } = await client.rpc('create_grant_budget_line', {
         p_grant_id: grantId,
-        p_category: 'Formation jeunes',
+        p_category: tag('Formation jeunes'),
         p_planned_amount: 100000,
       })
       expect(error).toBeNull()
       expect((data as { success: boolean })?.success).toBe(true)
       const budgetLineId = (data as { budget_line_id: string }).budget_line_id
+      await trackAfterGrantBudgetLine(grantId, budgetLineId, (data as { grant_budget_line_id: string }).grant_budget_line_id)
 
       // Le moteur d'engagement generique (1C.3, deja teste pour la
       // concurrence) s'applique sans modification a une ligne PAPEJ.
@@ -180,6 +226,7 @@ describe('Phase 1C.5 — PAPEJ', () => {
       })
       expect(commitError).toBeNull()
       expect((commitResult as { success: boolean })?.success).toBe(true)
+      await registry.trackDerivedFrom(adminClient(), 'budget_commitments', 'budget_line_id', [budgetLineId])
 
       const admin = adminClient()
       const { data: balance } = await admin
@@ -201,6 +248,7 @@ describe('Phase 1C.5 — PAPEJ', () => {
         p_planned_amount: 50000,
       })
       const budgetLineId = (lineResult as { budget_line_id: string }).budget_line_id
+      await trackAfterGrantBudgetLine(grantId, budgetLineId, (lineResult as { grant_budget_line_id: string }).grant_budget_line_id)
 
       const { client: requesterClient, userId: requesterId } = await signInAs('manager.demo@medfinder.test')
       const { data: expReq } = await requesterClient
@@ -210,17 +258,19 @@ describe('Phase 1C.5 — PAPEJ', () => {
           expense_number: '',
           requester_id: requesterId,
           budget_line_id: budgetLineId,
-          payee_name: 'Fournisseur PAPEJ',
+          payee_name: tag('Fournisseur PAPEJ'),
           amount: 20000,
           payment_method: 'cash',
         })
         .select('id')
         .single()
+      if (expReq?.id) registry.track('expense_requests', expReq.id as string)
       await requesterClient.rpc('submit_expense_request', { p_expense_id: expReq!.id })
       // DIRECTEUR_GENERAL exige AAL2 pour toute permission (Phase 1A).
       const { client: approverClient, deElevate } = await signInAsElevated('dg.demo@medfinder.test')
       try {
         await approverClient.rpc('approve_expense_request', { p_expense_id: expReq!.id, p_decision: 'approved' })
+        await registry.trackDerivedFrom(adminClient(), 'budget_commitments', 'budget_line_id', [budgetLineId])
 
         const { data: reportResult, error } = await client.rpc('generate_papej_report', {
           p_grant_id: grantId,
@@ -229,6 +279,8 @@ describe('Phase 1C.5 — PAPEJ', () => {
         })
         expect(error).toBeNull()
         expect((reportResult as { success: boolean })?.success).toBe(true)
+        // generate_papej_report() persiste sa sortie dans grant_reports.
+        await registry.trackDerivedFrom(adminClient(), 'grant_reports', 'grant_id', [grantId])
         const report = (reportResult as { report: { lines: Array<{ category: string; planned_amount: number; committed_open: number; available_amount: number }> } }).report
         const line = report.lines.find((l) => l.category === 'Materiel')
         expect(line).toBeTruthy()

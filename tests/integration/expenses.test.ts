@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { signInAs, signInAsElevated, adminClient, getOrgIdByName } from './helpers'
+import { FixtureRegistry, tag } from '../support/fixture-registry'
 
 // DIRECTEUR_GENERAL et SUPER_ADMIN exigent AAL2 pour TOUTE permission
 // (app_private.user_requires_mfa/is_super_admin, Phase 1A) — quand l'un de
@@ -17,48 +18,80 @@ import { signInAs, signInAsElevated, adminClient, getOrgIdByName } from './helpe
  */
 describe('Phase 1C.4 — Depenses', () => {
   let orgA: string
+  // Hermeticite (suite au retour de Jean Alix Pierre) — voir
+  // tests/support/fixture-registry.ts. Limite structurelle honnete : une
+  // fois une ecriture comptable POSTED (workflow complet jusqu'a
+  // justify_expense_request), journal_entries/journal_entry_lines sont
+  // immuables PAR CONCEPTION (accounting-core.test.ts le verifie
+  // explicitement, meme via service_role) — ces deux tables ne peuvent
+  // jamais etre nettoyees pour un parcours nominal complet, quel que soit
+  // le mecanisme de test. Tout le reste (expense_requests, expenses,
+  // budget_commitments, cash_movements, budget_lines/budgets/fiscal_years,
+  // chart_of_accounts, expense_categories, cash_accounts) reste nettoye —
+  // expenses.expense_request_id est `on delete restrict`, donc `expenses`
+  // est supprimee AVANT expense_requests (ordre inverse de creation),
+  // debloquant sa suppression malgre la reference figee au journal_entry.
+  const registry = new FixtureRegistry()
 
   beforeAll(async () => {
     orgA = await getOrgIdByName('MedFinder Demo — Organisation A')
+  })
+
+  afterAll(async () => {
+    await registry.cleanup(adminClient())
   })
 
   async function setupExpenseFixtures(orgId: string, plannedAmount: number, label: string) {
     const admin = adminClient()
     const { data: fy } = await admin
       .from('fiscal_years')
-      .insert({ organization_id: orgId, label: `EXP-${label}`, start_date: '2031-01-01', end_date: '2031-12-31' })
+      .insert({ organization_id: orgId, label: tag(`EXP-${label}`), start_date: '2031-01-01', end_date: '2031-12-31' })
       .select('id')
       .single()
+    registry.track('fiscal_years', fy!.id as string)
+
     const { data: budget } = await admin
       .from('budgets')
-      .insert({ organization_id: orgId, fiscal_year_id: fy!.id, name: `Budget ${label}`, status: 'approved' })
+      .insert({ organization_id: orgId, fiscal_year_id: fy!.id, name: tag(`Budget ${label}`), status: 'approved' })
       .select('id')
       .single()
+    registry.track('budgets', budget!.id as string)
+
     const { data: line } = await admin
       .from('budget_lines')
-      .insert({ organization_id: orgId, budget_id: budget!.id, category: `Cat ${label}`, planned_amount: plannedAmount })
+      .insert({ organization_id: orgId, budget_id: budget!.id, category: tag(`Cat ${label}`), planned_amount: plannedAmount })
       .select('id')
       .single()
+    registry.track('budget_lines', line!.id as string)
+
     const { data: expenseGlAccount } = await admin
       .from('chart_of_accounts')
-      .insert({ organization_id: orgId, code: `EXP-GL-${label}`, label: 'Charge test', type: 'expense' })
+      .insert({ organization_id: orgId, code: `EXP-GL-${label}`, label: tag('Charge test'), type: 'expense' })
       .select('id')
       .single()
+    registry.track('chart_of_accounts', expenseGlAccount!.id as string)
+
     const { data: cashGlAccount } = await admin
       .from('chart_of_accounts')
-      .insert({ organization_id: orgId, code: `CASH-GL-${label}`, label: 'Caisse GL test', type: 'asset' })
+      .insert({ organization_id: orgId, code: `CASH-GL-${label}`, label: tag('Caisse GL test'), type: 'asset' })
       .select('id')
       .single()
+    registry.track('chart_of_accounts', cashGlAccount!.id as string)
+
     const { data: category } = await admin
       .from('expense_categories')
-      .insert({ organization_id: orgId, name: `Categorie ${label}`, default_account_id: expenseGlAccount!.id })
+      .insert({ organization_id: orgId, name: tag(`Categorie ${label}`), default_account_id: expenseGlAccount!.id })
       .select('id')
       .single()
+    registry.track('expense_categories', category!.id as string)
+
     const { data: cashAccount } = await admin
       .from('cash_accounts')
-      .insert({ organization_id: orgId, name: `Caisse ${label}`, gl_account_id: cashGlAccount!.id, current_balance: 100000 })
+      .insert({ organization_id: orgId, name: tag(`Caisse ${label}`), gl_account_id: cashGlAccount!.id, current_balance: 100000 })
       .select('id')
       .single()
+    registry.track('cash_accounts', cashAccount!.id as string)
+
     return {
       budgetLineId: line!.id as string,
       categoryId: category!.id as string,
@@ -82,14 +115,48 @@ describe('Phase 1C.4 — Depenses', () => {
         requester_id: requesterId,
         category_id: categoryId,
         budget_line_id: budgetLineId,
-        payee_name: 'Fournisseur Test',
+        payee_name: tag('Fournisseur Test'),
         amount,
         payment_method: 'cash',
       })
       .select('id, expense_number')
       .single()
     if (error) throw error
+    registry.track('expense_requests', data!.id as string)
     return data as { id: string; expense_number: string }
+  }
+
+  /**
+   * A appeler apres approve_expense_request reussi — suit
+   * budget_commitments (§ FK restrict vers budget_lines).
+   */
+  async function trackAfterApprove(budgetLineId: string) {
+    await registry.trackDerivedFrom(adminClient(), 'budget_commitments', 'budget_line_id', [budgetLineId])
+  }
+
+  /**
+   * A appeler apres pay_expense_request reussi — suit cash_movements
+   * (reference_id = expenseId, insere par la RPC) et la ligne `expenses`
+   * elle-meme (expense_request_id `on delete restrict unique` : DOIT etre
+   * supprimee avant expense_requests, d'ou son suivi explicite dans
+   * l'ordre de creation, apres expense_requests).
+   */
+  async function trackAfterPay(expenseId: string) {
+    const admin = adminClient()
+    await registry.trackDerivedFrom(admin, 'cash_movements', 'reference_id', [expenseId])
+    await registry.trackDerivedFrom(admin, 'expenses', 'expense_request_id', [expenseId])
+  }
+
+  /**
+   * A appeler apres justify_expense_request reussi — le
+   * journal_entry_id est renvoye directement par la RPC. Suivi quand meme
+   * (best-effort, echouera silencieusement) : une fois POSTED,
+   * journal_entries/journal_entry_lines sont immuables par conception
+   * (voir commentaire au sommet du describe) et resteront en base.
+   */
+  async function trackAfterJustify(journalEntryId: string) {
+    registry.track('journal_entries', journalEntryId)
+    await registry.trackDerivedFrom(adminClient(), 'journal_entry_lines', 'entry_id', [journalEntryId])
   }
 
   describe('Creation (RLS) et numerotation', () => {
@@ -152,6 +219,7 @@ describe('Phase 1C.4 — Depenses', () => {
         })
         expect(approveError).toBeNull()
         expect((approveResult as { success: boolean })?.success).toBe(true)
+        await trackAfterApprove(budgetLineId)
 
         const admin = adminClient()
         const { data: afterApproval } = await admin.from('expense_requests').select('status').eq('id', req.id).single()
@@ -165,24 +233,31 @@ describe('Phase 1C.4 — Depenses', () => {
         })
         expect(payError).toBeNull()
         expect((payResult as { success: boolean })?.success).toBe(true)
+        await trackAfterPay(req.id)
 
         const { data: cashAfter } = await admin.from('cash_accounts').select('current_balance').eq('id', cashAccountId).single()
         expect(Number(cashAfter?.current_balance)).toBe(100000 - 1200)
 
-        const { error: attachError } = await requesterClient.from('expense_attachments').insert({
-          organization_id: orgA,
-          expense_request_id: req.id,
-          type: 'facture',
-          storage_path: `${orgA}/${req.id}/${Date.now()}-facture.pdf`,
-          original_filename: 'facture.pdf',
-        })
+        const { data: attachRow, error: attachError } = await requesterClient
+          .from('expense_attachments')
+          .insert({
+            organization_id: orgA,
+            expense_request_id: req.id,
+            type: 'facture',
+            storage_path: `${orgA}/${req.id}/${Date.now()}-facture.pdf`,
+            original_filename: 'facture.pdf',
+          })
+          .select('id')
+          .single()
         expect(attachError).toBeNull()
+        if (attachRow?.id) registry.track('expense_attachments', attachRow.id as string)
 
         const { data: justifyResult, error: justifyError } = await payerClient.rpc('justify_expense_request', {
           p_expense_id: req.id,
         })
         expect(justifyError).toBeNull()
         expect((justifyResult as { success: boolean })?.success).toBe(true)
+        await trackAfterJustify((justifyResult as { journal_entry_id: string }).journal_entry_id)
 
         const { data: final } = await admin.from('expense_requests').select('status').eq('id', req.id).single()
         expect(final?.status).toBe('posted')
@@ -211,12 +286,14 @@ describe('Phase 1C.4 — Depenses', () => {
       const { client: approverClient, deElevate } = await signInAsElevated('dg.demo@medfinder.test')
       try {
         await approverClient.rpc('approve_expense_request', { p_expense_id: req.id, p_decision: 'approved' })
+        await trackAfterApprove(budgetLineId)
         const { client: payerClient } = await signInAs('comptable.demo@medfinder.test')
         await payerClient.rpc('pay_expense_request', {
           p_expense_id: req.id,
           p_treasury_account_type: 'cash',
           p_treasury_account_id: cashAccountId,
         })
+        await trackAfterPay(req.id)
 
         const { data, error } = await payerClient.rpc('justify_expense_request', { p_expense_id: req.id })
         expect(error).toBeNull()
@@ -326,6 +403,7 @@ describe('Phase 1C.4 — Depenses', () => {
         })
         expect(error).toBeNull()
         expect((data as { success: boolean })?.success).toBe(true)
+        await trackAfterApprove(budgetLineId)
 
         const admin = adminClient()
         const { data: after } = await admin.from('expense_requests').select('status').eq('id', req.id).single()
@@ -365,6 +443,7 @@ describe('Phase 1C.4 — Depenses', () => {
       const { client: approverClient, deElevate } = await signInAsElevated('dg.demo@medfinder.test')
       try {
         await approverClient.rpc('approve_expense_request', { p_expense_id: req.id, p_decision: 'approved' })
+        await trackAfterApprove(budgetLineId)
 
         const admin = adminClient()
         const { data: committed } = await admin

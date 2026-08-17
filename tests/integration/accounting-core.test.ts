@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { signInAs, adminClient, getOrgIdByName } from './helpers'
+import { FixtureRegistry, tag } from '../support/fixture-registry'
 
 /**
  * Phase 1C, sous-jalon 1C.1 — Comptabilite minimale. Couvre les tests
@@ -12,24 +13,36 @@ import { signInAs, adminClient, getOrgIdByName } from './helpers'
 describe('Phase 1C.1 — Comptabilite minimale', () => {
   let orgA: string
   let orgB: string
+  // Hermeticite (suite au retour de Jean Alix Pierre) : chaque ligne creee
+  // par ce fichier est enregistree ici et nettoyee dans l'ordre inverse de
+  // creation par le afterAll ci-dessous — voir tests/support/fixture-registry.ts.
+  const registry = new FixtureRegistry()
 
   beforeAll(async () => {
     orgA = await getOrgIdByName('MedFinder Demo — Organisation A')
     orgB = await getOrgIdByName('MedFinder Demo — Organisation B')
   })
 
+  afterAll(async () => {
+    await registry.cleanup(adminClient())
+  })
+
   async function setupAccountsAndPeriod(orgId: string, label: string) {
     const admin = adminClient()
     const { data: fy } = await admin
       .from('fiscal_years')
-      .insert({ organization_id: orgId, label, start_date: '2026-01-01', end_date: '2026-12-31' })
+      .insert({ organization_id: orgId, label: tag(label), start_date: '2026-01-01', end_date: '2026-12-31' })
       .select('id')
       .single()
+    registry.track('fiscal_years', fy!.id as string)
+
     const { data: period } = await admin
       .from('accounting_periods')
       .insert({ organization_id: orgId, fiscal_year_id: fy!.id, month: 6 })
       .select('id')
       .single()
+    registry.track('accounting_periods', period!.id as string)
+
     // reverse_journal_entry() comptabilise la contre-passation dans la
     // periode COURANTE reelle (current_date), pas celle de l'ecriture
     // d'origine (accounting-design.md §7) — une periode couvrant le mois 6
@@ -37,18 +50,27 @@ describe('Phase 1C.1 — Comptabilite minimale', () => {
     // periode pour le mois reel courant (sauf s'il coincide deja avec 6).
     const currentMonth = new Date().getMonth() + 1
     if (currentMonth !== 6) {
-      await admin.from('accounting_periods').insert({ organization_id: orgId, fiscal_year_id: fy!.id, month: currentMonth })
+      const { data: currentPeriod } = await admin
+        .from('accounting_periods')
+        .insert({ organization_id: orgId, fiscal_year_id: fy!.id, month: currentMonth })
+        .select('id')
+        .single()
+      registry.track('accounting_periods', currentPeriod!.id as string)
     }
     const { data: debitAccount } = await admin
       .from('chart_of_accounts')
-      .insert({ organization_id: orgId, code: `D-${label}`, label: 'Compte debit test', type: 'expense' })
+      .insert({ organization_id: orgId, code: `D-${label}`, label: tag('Compte debit test'), type: 'expense' })
       .select('id')
       .single()
+    registry.track('chart_of_accounts', debitAccount!.id as string)
+
     const { data: creditAccount } = await admin
       .from('chart_of_accounts')
-      .insert({ organization_id: orgId, code: `C-${label}`, label: 'Compte credit test', type: 'asset' })
+      .insert({ organization_id: orgId, code: `C-${label}`, label: tag('Compte credit test'), type: 'asset' })
       .select('id')
       .single()
+    registry.track('chart_of_accounts', creditAccount!.id as string)
+
     const { data: journal } = await admin
       .from('journals')
       .select('id')
@@ -81,19 +103,27 @@ describe('Phase 1C.1 — Comptabilite minimale', () => {
         entry_date: '2026-06-15',
         source_type: 'manual',
         status: 'draft',
+        description: tag('ecriture de test'),
       })
       .select('id')
       .single()
     if (entryError) throw entryError
+    registry.track('journal_entries', entry!.id as string)
+
     for (const line of lines) {
-      const { error: lineError } = await admin.from('journal_entry_lines').insert({
-        organization_id: orgId,
-        entry_id: entry!.id,
-        account_id: line.accountId,
-        debit: line.debit,
-        credit: line.credit,
-      })
+      const { data: entryLine, error: lineError } = await admin
+        .from('journal_entry_lines')
+        .insert({
+          organization_id: orgId,
+          entry_id: entry!.id,
+          account_id: line.accountId,
+          debit: line.debit,
+          credit: line.credit,
+        })
+        .select('id')
+        .single()
       if (lineError) throw lineError
+      registry.track('journal_entry_lines', entryLine!.id as string)
     }
     return entry!.id as string
   }
@@ -103,11 +133,12 @@ describe('Phase 1C.1 — Comptabilite minimale', () => {
       const { client } = await signInAs('comptable.demo@medfinder.test')
       const { data, error } = await client
         .from('fiscal_years')
-        .insert({ organization_id: orgA, label: `RLS-${Date.now()}`, start_date: '2027-01-01', end_date: '2027-12-31' })
+        .insert({ organization_id: orgA, label: tag(`RLS-${Date.now()}`), start_date: '2027-01-01', end_date: '2027-12-31' })
         .select('id')
         .single()
       expect(error).toBeNull()
       expect(data?.id).toBeTruthy()
+      if (data?.id) registry.track('fiscal_years', data.id as string)
     })
 
     it('MANAGER (sans accounting.post) ne peut pas creer d\'exercice comptable', async () => {
@@ -301,6 +332,8 @@ describe('Phase 1C.1 — Comptabilite minimale', () => {
       expect((reverseResult as { success: boolean })?.success).toBe(true)
       const reversalId = (reverseResult as { reversal_entry_id: string }).reversal_entry_id
       expect(reversalId).toBeTruthy()
+      registry.track('journal_entries', reversalId)
+      await registry.trackDerivedFrom(admin, 'journal_entry_lines', 'entry_id', [reversalId])
 
       const { data: originalAfter } = await admin.from('journal_entries').select('*').eq('id', entryId).single()
       expect(originalAfter).toEqual(originalBefore)

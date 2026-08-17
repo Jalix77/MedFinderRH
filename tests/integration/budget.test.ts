@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { signInAs, adminClient, getOrgIdByName } from './helpers'
+import { FixtureRegistry, tag } from '../support/fixture-registry'
 
 /**
  * Phase 1C, sous-jalon 1C.3 — Budget. Couvre les tests obligatoires du plan
@@ -9,28 +10,43 @@ import { signInAs, adminClient, getOrgIdByName } from './helpers'
  */
 describe('Phase 1C.3 — Budget', () => {
   let orgA: string
+  // Hermeticite (suite au retour de Jean Alix Pierre — c'est ce fichier qui
+  // a le plus contribue aux 300+ lignes budgetaires accumulees) : chaque
+  // ligne creee est enregistree et nettoyee par le afterAll ci-dessous —
+  // voir tests/support/fixture-registry.ts.
+  const registry = new FixtureRegistry()
 
   beforeAll(async () => {
     orgA = await getOrgIdByName('MedFinder Demo — Organisation A')
+  })
+
+  afterAll(async () => {
+    await registry.cleanup(adminClient())
   })
 
   async function approvedBudgetLine(orgId: string, plannedAmount: number, label: string) {
     const admin = adminClient()
     const { data: fy } = await admin
       .from('fiscal_years')
-      .insert({ organization_id: orgId, label: `BUD-${label}`, start_date: '2028-01-01', end_date: '2028-12-31' })
+      .insert({ organization_id: orgId, label: tag(`BUD-${label}`), start_date: '2028-01-01', end_date: '2028-12-31' })
       .select('id')
       .single()
+    registry.track('fiscal_years', fy!.id as string)
+
     const { data: budget } = await admin
       .from('budgets')
-      .insert({ organization_id: orgId, fiscal_year_id: fy!.id, name: `Budget ${label}`, status: 'approved' })
+      .insert({ organization_id: orgId, fiscal_year_id: fy!.id, name: tag(`Budget ${label}`), status: 'approved' })
       .select('id')
       .single()
+    registry.track('budgets', budget!.id as string)
+
     const { data: line } = await admin
       .from('budget_lines')
-      .insert({ organization_id: orgId, budget_id: budget!.id, category: `Categorie ${label}`, planned_amount: plannedAmount })
+      .insert({ organization_id: orgId, budget_id: budget!.id, category: tag(`Categorie ${label}`), planned_amount: plannedAmount })
       .select('id')
       .single()
+    registry.track('budget_lines', line!.id as string)
+
     return { budgetId: budget!.id as string, lineId: line!.id as string }
   }
 
@@ -39,19 +55,26 @@ describe('Phase 1C.3 — Budget', () => {
       const { client } = await signInAs('comptable.demo@medfinder.test')
       const { data: fy } = await client
         .from('fiscal_years')
-        .insert({ organization_id: orgA, label: `RLS-BUD-${Date.now()}`, start_date: '2029-01-01', end_date: '2029-12-31' })
+        .insert({ organization_id: orgA, label: tag(`RLS-BUD-${Date.now()}`), start_date: '2029-01-01', end_date: '2029-12-31' })
         .select('id')
         .single()
+      registry.track('fiscal_years', fy!.id as string)
+
       const { data: budget, error: budgetError } = await client
         .from('budgets')
-        .insert({ organization_id: orgA, fiscal_year_id: fy!.id, name: `RLS ${Date.now()}` })
+        .insert({ organization_id: orgA, fiscal_year_id: fy!.id, name: tag(`RLS ${Date.now()}`) })
         .select('id')
         .single()
       expect(budgetError).toBeNull()
-      const { error: lineError } = await client
+      registry.track('budgets', budget!.id as string)
+
+      const { data: line, error: lineError } = await client
         .from('budget_lines')
-        .insert({ organization_id: orgA, budget_id: budget!.id, category: 'Test', planned_amount: 1000 })
+        .insert({ organization_id: orgA, budget_id: budget!.id, category: tag('Test'), planned_amount: 1000 })
+        .select('id')
+        .single()
       expect(lineError).toBeNull()
+      if (line?.id) registry.track('budget_lines', line.id as string)
     })
 
     it('SUPPORT (sans budget.manage) ne peut pas creer de budget', async () => {
@@ -105,6 +128,7 @@ describe('Phase 1C.3 — Budget', () => {
       })
       expect(error).toBeNull()
       expect((data as { success: boolean })?.success).toBe(true)
+      await registry.trackDerivedFrom(adminClient(), 'budget_commitments', 'budget_line_id', [lineId])
     })
 
     it('un engagement depassant le disponible est refuse', async () => {
@@ -137,19 +161,24 @@ describe('Phase 1C.3 — Budget', () => {
       const admin = adminClient()
       const { data: fy } = await admin
         .from('fiscal_years')
-        .insert({ organization_id: orgA, label: `DRAFT-${Date.now()}`, start_date: '2030-01-01', end_date: '2030-12-31' })
+        .insert({ organization_id: orgA, label: tag(`DRAFT-${Date.now()}`), start_date: '2030-01-01', end_date: '2030-12-31' })
         .select('id')
         .single()
+      registry.track('fiscal_years', fy!.id as string)
+
       const { data: budget } = await admin
         .from('budgets')
-        .insert({ organization_id: orgA, fiscal_year_id: fy!.id, name: 'Non approuve', status: 'draft' })
+        .insert({ organization_id: orgA, fiscal_year_id: fy!.id, name: tag('Non approuve'), status: 'draft' })
         .select('id')
         .single()
+      registry.track('budgets', budget!.id as string)
+
       const { data: line } = await admin
         .from('budget_lines')
-        .insert({ organization_id: orgA, budget_id: budget!.id, category: 'Test', planned_amount: 1000 })
+        .insert({ organization_id: orgA, budget_id: budget!.id, category: tag('Test'), planned_amount: 1000 })
         .select('id')
         .single()
+      registry.track('budget_lines', line!.id as string)
 
       const { client } = await signInAs('comptable.demo@medfinder.test')
       const { error } = await client.rpc('commit_budget_line', {
@@ -186,6 +215,7 @@ describe('Phase 1C.3 — Budget', () => {
 
       expect(succeeded.length).toBe(1)
       expect(failed.length).toBe(1)
+      await registry.trackDerivedFrom(adminClient(), 'budget_commitments', 'budget_line_id', [lineId])
 
       // Aucun double comptage : le disponible final reflete exactement UN
       // engagement de 700, pas deux (qui aurait donne -400).
@@ -211,6 +241,7 @@ describe('Phase 1C.3 — Budget', () => {
         p_amount: 300,
       })
       const commitmentId = (commitResult as { commitment_id: string }).commitment_id
+      await registry.trackDerivedFrom(adminClient(), 'budget_commitments', 'budget_line_id', [lineId])
 
       const admin = adminClient()
       // app_private.release_budget_commitment n'est pas exposee publiquement
@@ -241,6 +272,7 @@ describe('Phase 1C.3 — Budget', () => {
       })
       expect(error).toBeNull()
       expect((data as { success: boolean })?.success).toBe(true)
+      await registry.trackDerivedFrom(adminClient(), 'budget_transfers', 'from_line_id', [fromLine])
 
       const admin = adminClient()
       const { data: lines } = await admin.from('budget_lines').select('id, planned_amount').in('id', [fromLine, toLine])

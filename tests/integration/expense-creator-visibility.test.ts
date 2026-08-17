@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeAll } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
 import { signInAs, adminClient, getOrgIdByName } from './helpers'
+import { FixtureRegistry, tag } from '../support/fixture-registry'
 
 /**
  * Verification explicite demandee pour la migration 20260816090010 (et son
@@ -10,29 +11,40 @@ import { signInAs, adminClient, getOrgIdByName } from './helpers'
 describe('Phase 1C-UI — verification migration 090010/090012 (visibilite AGENT_TERRAIN)', () => {
   let orgA: string
   let orgB: string
+  const registry = new FixtureRegistry()
 
   beforeAll(async () => {
     orgA = await getOrgIdByName('MedFinder Demo — Organisation A')
     orgB = await getOrgIdByName('MedFinder Demo — Organisation B')
   })
 
+  afterAll(async () => {
+    await registry.cleanup(adminClient())
+  })
+
   async function approvedBudgetLine(label: string) {
     const admin = adminClient()
     const { data: fy } = await admin
       .from('fiscal_years')
-      .insert({ organization_id: orgA, label: `verif090010-${label}`, start_date: '2034-01-01', end_date: '2034-12-31' })
+      .insert({ organization_id: orgA, label: tag(`verif090010-${label}`), start_date: '2034-01-01', end_date: '2034-12-31' })
       .select('id')
       .single()
+    registry.track('fiscal_years', fy!.id as string)
+
     const { data: budget } = await admin
       .from('budgets')
-      .insert({ organization_id: orgA, fiscal_year_id: fy!.id, name: `Budget verif ${label}`, status: 'approved' })
+      .insert({ organization_id: orgA, fiscal_year_id: fy!.id, name: tag(`Budget verif ${label}`), status: 'approved' })
       .select('id')
       .single()
+    registry.track('budgets', budget!.id as string)
+
     const { data: line } = await admin
       .from('budget_lines')
-      .insert({ organization_id: orgA, budget_id: budget!.id, category: `Categorie verif ${label}`, planned_amount: 10000 })
+      .insert({ organization_id: orgA, budget_id: budget!.id, category: tag(`Categorie verif ${label}`), planned_amount: 10000 })
       .select('id, category')
       .single()
+    registry.track('budget_lines', line!.id as string)
+
     return { budgetId: budget!.id as string, lineId: line!.id as string, category: line!.category as string }
   }
 
@@ -40,19 +52,25 @@ describe('Phase 1C-UI — verification migration 090010/090012 (visibilite AGENT
     const admin = adminClient()
     const { data: fy } = await admin
       .from('fiscal_years')
-      .insert({ organization_id: orgA, label: `verifdraft090010-${label}`, start_date: '2034-01-01', end_date: '2034-12-31' })
+      .insert({ organization_id: orgA, label: tag(`verifdraft090010-${label}`), start_date: '2034-01-01', end_date: '2034-12-31' })
       .select('id')
       .single()
+    registry.track('fiscal_years', fy!.id as string)
+
     const { data: budget } = await admin
       .from('budgets')
-      .insert({ organization_id: orgA, fiscal_year_id: fy!.id, name: `Budget brouillon verif ${label}` })
+      .insert({ organization_id: orgA, fiscal_year_id: fy!.id, name: tag(`Budget brouillon verif ${label}`) })
       .select('id')
       .single()
+    registry.track('budgets', budget!.id as string)
+
     const { data: line } = await admin
       .from('budget_lines')
-      .insert({ organization_id: orgA, budget_id: budget!.id, category: `Categorie brouillon verif ${label}`, planned_amount: 10000 })
+      .insert({ organization_id: orgA, budget_id: budget!.id, category: tag(`Categorie brouillon verif ${label}`), planned_amount: 10000 })
       .select('id, category')
       .single()
+    registry.track('budget_lines', line!.id as string)
+
     return { budgetId: budget!.id as string, lineId: line!.id as string, category: line!.category as string }
   }
 
@@ -85,13 +103,14 @@ describe('Phase 1C-UI — verification migration 090010/090012 (visibilite AGENT
         organization_id: orgA,
         budget_line_id: lineId,
         requester_id: userId,
-        payee_name: 'Fournisseur verif',
+        payee_name: tag('Fournisseur verif'),
         amount: 100,
         payment_method: 'cash',
       })
       .select('id')
       .single()
     expect(insErr).toBeNull()
+    if (req?.id) registry.track('expense_requests', req.id as string)
 
     const { data: seen, error: selErr } = await client.from('expense_requests').select('id').eq('id', req!.id)
     expect(selErr).toBeNull()
@@ -113,13 +132,14 @@ describe('Phase 1C-UI — verification migration 090010/090012 (visibilite AGENT
         organization_id: orgA,
         budget_line_id: lineId,
         requester_id: managerId,
-        payee_name: 'Fournisseur autre createur',
+        payee_name: tag('Fournisseur autre createur'),
         amount: 200,
         payment_method: 'cash',
       })
       .select('id')
       .single()
     expect(insErr).toBeNull()
+    if (otherReq?.id) registry.track('expense_requests', otherReq.id as string)
 
     const { client: agentClient } = await signInAs('agent.demo@medfinder.test')
     const { data: seen, error } = await agentClient.from('expense_requests').select('id').eq('id', otherReq!.id)

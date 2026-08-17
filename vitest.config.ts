@@ -23,7 +23,11 @@ export default defineConfig({
     include: ['tests/**/*.test.{ts,tsx}'],
     setupFiles: ['tests/setup-jest-dom.ts'],
     testTimeout: 20000,
-    hookTimeout: 30000,
+    // 60s (pas 30s) : les afterAll de nettoyage de fixtures
+    // (tests/support/fixture-registry.ts) font plusieurs allers-retours
+    // reseau vers le cloud — insuffisant sous charge reseau reelle,
+    // observe en pratique (echec du hook lui-meme, pas juste lent).
+    hookTimeout: 60000,
     globalSetup: ['tests/global-setup.ts'],
     fileParallelism: false,
   },

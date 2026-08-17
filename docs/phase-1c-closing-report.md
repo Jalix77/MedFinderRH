@@ -554,21 +554,28 @@ fonctions (ni aucune autre du schéma `public`) n'a de privilège `EXECUTE`
 accordé à `PUBLIC` ou `anon`. C'est le mécanisme réel qui garantit le
 refus anon, pas seulement le comportement observé au cas par cas.
 
-### 20.3 — `auth_leaked_password_protection` (1 avertissement) — non corrigible par migration, action manuelle documentée
+### 20.3 — `auth_leaked_password_protection` (1 avertissement) — indisponible sur le plan Supabase actuel, pas un défaut applicatif
 
-Ce réglage vit dans la configuration Auth du projet (GoTrue), pas dans le
-schéma Postgres — **aucune migration SQL ne peut l'activer**, et je n'ai
-ni session dashboard authentifiée ni jeton d'accès personnel Management
-API pour l'activer à votre place. **Je ne déclare donc PAS ce point
-corrigé.** Action manuelle requise :
+**Correction importante (précision de Jean Alix Pierre) : ce point ne doit
+pas être présenté comme une faille de l'application.** "Leaked password
+protection" (vérification de chaque mot de passe candidat contre l'API
+HaveIBeenPwned, par k-anonymat de préfixe de hash — jamais le mot de
+passe en clair transmis) est une **fonctionnalité Supabase Auth
+indisponible sur le plan Free** de ce projet — elle ne s'active pas au
+niveau du schéma applicatif ni par migration SQL, quel que soit le code
+écrit ici. Ce n'est donc ni un bug ni une négligence de Phase 1C : c'est
+une limite de palier d'infrastructure, au même titre qu'un quota
+d'authentification ou une limite de taille de base sur un plan gratuit.
+
+**Action à prévoir, documentée pour plus tard** (pas pour cette clôture) :
+lors du passage du projet Supabase au **plan Pro** (recommandé avant
+toute mise en production avec de vrais utilisateurs/données financières
+sensibles) :
 
 1. Dashboard Supabase → projet `qwydgqheceglulfxwtgo` → **Authentication**
    → **Providers** (ou **Policies** selon la version du dashboard) →
    section **Password**.
-2. Activer **"Leaked password protection"** (vérifie chaque mot de passe
-   candidat contre l'API HaveIBeenPwned au moment de l'inscription/du
-   changement de mot de passe, sans jamais transmettre le mot de passe en
-   clair — k-anonymat par préfixe de hash).
+2. Activer **"Leaked password protection"**.
 3. Référence :
    `https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection`.
 
@@ -693,9 +700,9 @@ employee_sensitive_data.employee_sensitive_data_update   users.users_update_self
 |---|---:|---|---|---|---|---|
 | `function_search_path_mutable` | 5 | Fonctions trigger `app_private.*` créées sans `set search_path` explicite | Corriger | `search_path = ''` (voir §20.1, analyse individuelle) — migration `090014` | `debug_security_definer_without_search_path()` (public + app_private) → vide | **Corrigé, vérifié en direct** |
 | `authenticated_security_definer_function_executable` | 23 | Fonctions `SECURITY DEFINER` exécutables par `authenticated` | Aucune révocation — les 23 sont Catégorie A (intentionnelles, sécurisées) | Audit individuel complet (§20.2) — aucun changement de code, un test manquant ajouté (`phase1c-anon-refusal.test.ts`, 14 tests) | `security-definer-audit.test.ts` (18) + `phase1c-anon-refusal.test.ts` (14) + `debug_unwanted_function_grants('public')` → vide | **Audité, aucune régression, test manquant comblé** |
-| `auth_leaked_password_protection` | 1 | Protection mots de passe compromis désactivée (réglage Auth, pas SQL) | Action manuelle requise | Chemin exact documenté (§20.3) — **non appliqué**, hors de ma portée technique | — (nécessite une capture d'écran après action manuelle) | **Non corrigé — action manuelle requise, explicitement non déclarée faite** |
+| `auth_leaked_password_protection` | 1 | Fonctionnalité Supabase Auth **indisponible sur le plan Free** de ce projet — pas un réglage désactivé par erreur | Reporter au passage en plan Pro | Chemin exact documenté (§20.3) pour ce moment-là — **non applicable aujourd'hui**, pas un défaut de l'application | — (à revérifier après upgrade de plan) | **Non corrigible aujourd'hui — limite de palier d'infrastructure, pas une faille** |
 | `auth_rls_initplan` | 74 | Policies RLS avec appel `auth.*()` nu (réévalué par ligne) | Corriger — enrobage syntaxique uniquement | `(select auth.<fn>())`, générée mécaniquement depuis l'état réel des policies — migration `090016` (§20.4) | Re-dump des 79 policies → 0 appel nu restant ; `expense-creator-visibility.test.ts` 6/6 (policies les plus sensibles) | **Corrigé, vérifié en direct, logique d'autorisation inchangée** |
-| **Total** | **103** | | | | | **102/103 corrigés et vérifiés en direct ; 1/103 (mot de passe compromis) documenté, action manuelle en attente de vous** |
+| **Total** | **103** | | | | | **102/103 corrigés et vérifiés en direct ; 1/103 (mot de passe compromis) hors de portée sur le plan actuel — pas un défaut de sécurité applicatif** |
 
 **Important — ce que je ne déclare PAS** : je n'ai revu ni les 29 ni les 74
 avertissements *dans le dashboard Supabase Studio lui-même* après
