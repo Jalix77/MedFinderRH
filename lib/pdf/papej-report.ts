@@ -57,7 +57,15 @@ const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2
 const NON_WINANSI_SPACES = /[   -   　﻿]/g
 
 function winAnsiSafe(value: string): string {
-  return value.replace(NON_WINANSI_SPACES, ' ')
+  const withNormalSpaces = value.replace(NON_WINANSI_SPACES, ' ')
+  // Defense en profondeur : tout code point restant hors de portee WinAnsi
+  // (deja rencontre une fois avec un marqueur de test utilisant des
+  // crochets Unicode ⟦⟧ — corrige a la source, mais ce generateur ne doit
+  // de toute facon jamais planter sur une entree qu'il ne controle pas,
+  // ex. guillemets typographiques/tiret cadratin/emoji saisis par un
+  // utilisateur reel) est remplace par un caractere neutre plutot que de
+  // faire planter la generation du PDF.
+  return withNormalSpaces.replace(/[^\x20-\x7E\xA0-\xFF]/g, '?')
 }
 
 /**

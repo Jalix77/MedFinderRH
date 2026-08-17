@@ -34,7 +34,14 @@ import type { SupabaseClient } from '@supabase/supabase-js'
  * "tout ce qui contient E2E") pour le nettoyage EN DIRECT d'un test —
  * uniquement les identifiants exacts realellement crees par CE test.
  */
-export const TEST_FIXTURE_MARKER = '⟦mf-test-fixture⟧'
+// ASCII strict (pas de crochets Unicode ⟦⟧) : trouvaille reelle — un nom
+// tague finit parfois affiche dans un PDF genere par pdf-lib
+// (lib/pdf/papej-report.ts, rapport PAPEJ), dont l'encodage WinAnsi ne
+// couvre pas ⟦/⟧ (U+27E6/27E7) — faisait planter la generation (500) du
+// tout premier test qui exerce reellement le contenu du PDF avec un
+// financement tague. Un marqueur ASCII est representable partout
+// (PDF/CSV/HTML/dashboard) sans exception.
+export const TEST_FIXTURE_MARKER = '[TEST-FIXTURE]'
 
 /** Prefixe un libelle avec la marque de fixture de test — a utiliser sur
  * TOUT champ texte identifiant (name/category/label/payee_name/...) cree
