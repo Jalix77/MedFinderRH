@@ -45,6 +45,11 @@ next-env.d.ts
 supabase/.temp/
 supabase/.branches/
 
+# scripts/dump-policies.mjs output — dump brut de l'etat live des policies
+# RLS (pg_policies), regenerable a tout moment, jamais une source de verite
+# a committer (voir scripts/generate-rls-initplan-fix.mjs qui le consomme).
+scripts/.policies-dump.json
+
 # test artifacts
 /playwright-report/
 /test-results/

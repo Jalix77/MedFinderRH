@@ -65,6 +65,18 @@ export async function signInAsElevated(
   const { client, userId } = await signInAs(email)
   const { computeTotp } = await import('./totp')
 
+  // Auto-guerison : un test precedent interrompu (ex. rate limit Supabase
+  // Auth en plein run, deja observe dans ce sandbox sous forte charge)
+  // entre l'enrolement et deElevate() laisse un facteur TOTP residuel avec
+  // le nom par defaut "" — bloquant tout enrolement futur pour ce meme
+  // compte (mfa_factor_name_conflict, 422). Nettoyage defensif via l'API
+  // admin avant chaque enrolement plutot qu'une supposition d'etat propre.
+  const admin = adminClient()
+  const { data: existingFactors } = await admin.auth.admin.mfa.listFactors({ userId })
+  for (const factor of existingFactors?.factors ?? []) {
+    await admin.auth.admin.mfa.deleteFactor({ id: factor.id, userId })
+  }
+
   const { data: enroll, error: enrollError } = await client.auth.mfa.enroll({ factorType: 'totp' })
   if (enrollError || !enroll) {
     throw new Error(`Echec enrolement MFA pour ${email}: ${enrollError?.message}`)

@@ -156,10 +156,22 @@ describe('Overrides de permission individuels (ALLOW/DENY)', () => {
 
     // La contrainte CHECK (expires_at is null or expires_at > created_at)
     // interdit de creer un override "deja expire" — on cree une expiration
-    // tres proche dans le futur puis on attend qu'elle passe, pour tester
-    // le comportement reel du "point dans le temps" plutot qu'une donnee
-    // invalide.
-    const { data: override } = await admin
+    // proche dans le futur puis on attend qu'elle passe, pour tester le
+    // comportement reel du "point dans le temps" plutot qu'une donnee
+    // invalide. Trouvaille reelle contre le cloud : expires_at est calcule
+    // cote client AVANT l'appel reseau, et la latence de ce sandbox
+    // (TLS/egress) est fortement variable — observee jusqu'a ~3.7s sur un
+    // seul insert — donc toute marge fixe choisie a l'avance peut se faire
+    // rattraper par created_at (echec de la contrainte CHECK cote serveur).
+    // Marge genereuse (10s, tolere une latence bien superieure a tout ce
+    // qui a ete observe) + attente RECALCULEE apres coup a partir de
+    // expires_at reellement enregistre (pas d'un total fixe devine a
+    // l'avance) : correct quelle qu'ait ete la latence de cet insert
+    // precis. Sans lien avec RLS — cet insert utilise le client
+    // service_role, qui ignore RLS.
+    const EXPIRY_MARGIN_MS = 10_000
+    const WAIT_BUFFER_MS = 1500
+    const { data: override, error: insertError } = await admin
       .from('user_permission_overrides')
       .insert({
         user_id: employeUserId,
@@ -168,10 +180,11 @@ describe('Overrides de permission individuels (ALLOW/DENY)', () => {
         effect: 'grant',
         reason: 'Test integration — override bientot expire',
         granted_by: employeUserId,
-        expires_at: new Date(Date.now() + 1500).toISOString(),
+        expires_at: new Date(Date.now() + EXPIRY_MARGIN_MS).toISOString(),
       })
-      .select('id')
+      .select('id, expires_at')
       .single()
+    expect(insertError, `insertion de l'override : ${JSON.stringify(insertError)}`).toBeNull()
     overrideIds.push((override as { id: string }).id)
 
     const { client } = await signInAs('employe.demo@medfinder.test')
@@ -182,7 +195,8 @@ describe('Overrides de permission individuels (ALLOW/DENY)', () => {
     })
     expect(beforeExpiry.data, 'accorde tant que non expire').toBe(true)
 
-    await new Promise((resolve) => setTimeout(resolve, 2000))
+    const remainingMs = new Date((override as { expires_at: string }).expires_at).getTime() - Date.now()
+    await new Promise((resolve) => setTimeout(resolve, Math.max(0, remainingMs) + WAIT_BUFFER_MS))
 
     const afterExpiry = await client.rpc('current_user_has_permission', {
       p_org_id: orgA,

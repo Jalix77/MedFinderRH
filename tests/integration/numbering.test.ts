@@ -3,13 +3,23 @@ import { signInAs, adminClient, getOrgIdByName } from './helpers'
 
 describe('Numerotation automatique (docs/accounting-design.md §11)', () => {
   let orgA: string
+  // entity_type unique par execution : le cloud partage n'est jamais
+  // reinitialise entre deux lancements de la suite (SKIP_DB_RESET=1,
+  // documente dans package.json). Un entity_type fixe ('test_entity')
+  // faisait donc avancer le compteur a chaque run reel (TST-0001 la
+  // premiere fois, TST-0002 la fois suivante, etc.), un artefact
+  // d'environnement sans lien avec la logique testee — jamais reproduit en
+  // local avec `supabase db reset`. Un entity_type distinct a chaque
+  // execution garantit une sequence fraiche (demarre bien a 0001) sans
+  // dependre d'une reinitialisation externe.
+  const entityType = `test_entity_${Date.now()}`
 
   beforeAll(async () => {
     orgA = await getOrgIdByName('MedFinder Demo — Organisation A')
     const admin = adminClient()
     await admin.from('numbering_sequences').insert({
       organization_id: orgA,
-      entity_type: 'test_entity',
+      entity_type: entityType,
       prefix_pattern: 'TST-{seq:04d}',
       reset_rule: 'never',
     })
@@ -20,14 +30,14 @@ describe('Numerotation automatique (docs/accounting-design.md §11)', () => {
 
     const { data: first, error: e1 } = await client.rpc('next_number', {
       p_org_id: orgA,
-      p_entity_type: 'test_entity',
+      p_entity_type: entityType,
     })
     expect(e1).toBeNull()
     expect(first).toBe('TST-0001')
 
     const { data: second } = await client.rpc('next_number', {
       p_org_id: orgA,
-      p_entity_type: 'test_entity',
+      p_entity_type: entityType,
     })
     expect(second).toBe('TST-0002')
   })
@@ -36,7 +46,7 @@ describe('Numerotation automatique (docs/accounting-design.md §11)', () => {
     const { client } = await signInAs('orgb.demo@medfinder.test')
     const { error } = await client.rpc('next_number', {
       p_org_id: orgA,
-      p_entity_type: 'test_entity',
+      p_entity_type: entityType,
     })
     expect(error).toBeTruthy()
   })
