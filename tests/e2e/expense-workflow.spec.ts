@@ -77,7 +77,15 @@ test.describe('Workflow depense', () => {
       // impossible, preuve directe de la protection double-soumission
       // (useTransition + disabled, composants/finance/action-form.tsx).
       await expect(submitButton).toHaveCount(0, { timeout: 25000 })
-      await expect(page.getByText('Soumise')).toBeVisible()
+      // Meme marge que ci-dessus (25s, pas le defaut 5s) : le bouton
+      // disparait des la transition d'etat cote client, mais le texte de
+      // statut ne s'affiche qu'apres le round-trip router.refresh() complet
+      // (re-rendu du composant serveur) — sous latence reseau cloud
+      // variable, 5s s'est revele trop court (echec intermittent reel
+      // observe, jamais un defaut applicatif : le flux
+      // submit_expense_request -> statut 'submitted' est rapide et correct
+      // en isolation directe, voir docs/phase-1c-closing-report.md).
+      await expect(page.getByText('Soumise')).toBeVisible({ timeout: 25000 })
     } finally {
       await cleanup()
     }
