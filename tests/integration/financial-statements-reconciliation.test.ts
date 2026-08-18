@@ -363,6 +363,44 @@ describe('Phase 2B — Reconciliation des etats financiers', () => {
       expect(Number(treasuryAsset!.balance)).toBe(1500)
     })
 
+    // generate_balance_sheet_report a une signature differente des 5 autres
+    // RPC (p_fiscal_year_id/p_as_of_date au lieu de p_period_start/
+    // p_period_end) — non couverte par la boucle RPCS du describe
+    // "Securite RPC" ci-dessous ; verifiee separement ici, dans le meme
+    // describe que sa fixture (fiscalYearId deja resolu ci-dessus).
+    it('bilan : isolation multi-organisation et permission accounting.view (anon/EMPLOYE/SUPPORT/Org B refuses, COMPTABLE autorise)', async () => {
+      const fiscalYearId = await getFiscalYearId(orgA, year)
+      const args = { p_org_id: orgA, p_fiscal_year_id: fiscalYearId, p_as_of_date: `${year}-07-31` }
+
+      const { createClient } = await import('@supabase/supabase-js')
+      const anon = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!)
+      const { error: anonError } = await anon.rpc('generate_balance_sheet_report', args)
+      expect(anonError).toBeTruthy()
+      expect(anonError!.code).toBe('42501')
+
+      const { client: employeClient } = await signInAs('employe.demo@medfinder.test')
+      const { data: employeData, error: employeError } = await employeClient.rpc('generate_balance_sheet_report', args)
+      expect(employeError).toBeNull()
+      expect((employeData as { success: boolean; error: string }).success).toBe(false)
+      expect((employeData as { success: boolean; error: string }).error).toBe('not_authorized')
+
+      const { client: supportClient } = await signInAs('support.demo@medfinder.test')
+      const { data: supportData, error: supportError } = await supportClient.rpc('generate_balance_sheet_report', args)
+      expect(supportError).toBeNull()
+      expect((supportData as { success: boolean; error: string }).success).toBe(false)
+      expect((supportData as { success: boolean; error: string }).error).toBe('not_authorized')
+
+      const { client: orgbClient } = await signInAs('orgb.demo@medfinder.test')
+      const { data: orgbData, error: orgbError } = await orgbClient.rpc('generate_balance_sheet_report', args)
+      expect(orgbError).toBeNull()
+      expect((orgbData as { success: boolean; error: string }).success).toBe(false)
+      expect((orgbData as { success: boolean; error: string }).error).toBe('not_authorized')
+
+      const { data: comptableData, error: comptableError } = await comptableClient.rpc('generate_balance_sheet_report', args)
+      expect(comptableError).toBeNull()
+      expect((comptableData as { success: boolean }).success).toBe(true)
+    })
+
     it('flux de tresorerie : classification operating/investing/financing/UNCLASSIFIED/virement interne', async () => {
       const client = comptableClient
       const { data, error } = await client.rpc('generate_cash_flow_report', {
