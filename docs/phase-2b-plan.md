@@ -1,238 +1,307 @@
-# Phase 2B — États financiers — Plan proposé
+# Phase 2B — États financiers — Plan validé (17/08/2026)
 
-Statut : **PROPOSITION EN ATTENTE DE VALIDATION — AUCUNE IMPLÉMENTATION
-COMMENCÉE.** Rédigé après clôture de Phase 2A (approuvée le 17/08/2026)
-et votre exigence explicite pour 2B : les chiffres doivent être dérivés
-**exclusivement** des écritures comptables postées, jamais directement
-des modules métier ; chaque état doit se réconcilier avec la balance
-générale, testé automatiquement, pas vérifié visuellement. Ce document
-répond point par point à votre liste (périmètre, états, vues/RPC,
-règles de calcul, contrôles multi-org, permissions, filtres, exports,
-tests, risques).
+Statut : **PLAN VALIDÉ PAR JEAN ALIX PIERRE, 13 ajustements intégrés
+ci-dessous avant le premier commit de code** (même discipline que
+`docs/phase-1c-plan.md`/`docs/phase-2-plan.md`). **Phase 2B est
+autorisée à démarrer.** Aucune ligne de Phase 2C n'a été commencée.
+
+## 0. Principe directeur (rappel, non négociable)
+
+Les six états sont dérivés **exclusivement** de `journal_entries`/
+`journal_entry_lines` en statut `posted`. **Aucun chiffre financier
+n'est repris directement** depuis `expense_requests`, `grants`,
+`invoices` (2C, pas encore construit), ou `cash_movements` — y compris
+pour le flux de trésorerie (correction actée, voir §6). Si une donnée
+n'existe pas dans le grand livre posté, elle n'existe pas dans un état
+financier de Phase 2B, point final.
 
 ## 1. Périmètre exact
 
-**Dans le périmètre** : 6 états financiers en **lecture seule**,
-générés à la demande, jamais stockés — journal général, grand livre,
-balance générale, compte de résultat, bilan, flux de trésorerie.
+6 états en lecture seule, générés à la demande, jamais stockés :
+journal général, grand livre, balance générale, compte de résultat,
+bilan, flux de trésorerie (méthode directe — voir §6). Aucune nouvelle
+table de données métier, aucune saisie, **aucune écriture de clôture
+d'exercice formelle** (le résultat non affecté reste calculé à la
+volée, jamais comptabilisé automatiquement — §5).
 
-**Hors périmètre 2B** (confirmé par votre message, réservé à 2C-2F ou
-au-delà) : aucune nouvelle table de données métier, aucune saisie,
-aucune clôture d'exercice formelle (génération d'écritures de clôture
-qui virerait le résultat vers les capitaux propres — 2B **calcule** le
-résultat non clôturé à la volée, il ne le comptabilise pas), pas de
-balance auxiliaire clients/fournisseurs (nécessite 2C, non construit).
+**Une extension de schéma minimale est nécessaire** (annoncée dès
+maintenant, détaillée §6) : `chart_of_accounts.cash_flow_category`,
+pour la classification configurable des flux de trésorerie exigée par
+Jean Alix Pierre. C'est la seule colonne ajoutée dans tout Phase 2B —
+aucune nouvelle table.
 
-## 2. États à livrer (6)
+## 2. Journal général
 
-| État | Contenu | Source exclusive |
-|---|---|---|
-| **Journal général** | Liste chronologique de toutes les écritures postées de la période, avec leurs lignes | `journal_entries` (`status='posted'`) + `journal_entry_lines` |
-| **Grand livre** | Mouvements par compte (débit/crédit/solde courant), un compte ou tous | `journal_entry_lines` jointes à `journal_entries` postées |
-| **Balance générale** | Total débit/crédit/solde par compte sur la période — **la référence à laquelle tous les autres états se réconcilient** | idem |
-| **Compte de résultat** | Revenus − Charges = Résultat net de la période | Comptes `type IN ('revenue','expense')` |
-| **Bilan** | Actif = Passif + Capitaux propres (statutaires + résultat non clôturé) | Comptes `type IN ('asset','liability','equity')` + résultat calculé (§4) |
-| **Flux de trésorerie** | Mouvements des seuls comptes de trésorerie réels | `journal_entry_lines` filtrées aux comptes liés à `cash_accounts`/`bank_accounts`/`mobile_money_accounts` (§3, **corrigé** par rapport au premier brouillon de `docs/phase-2-plan.md`) |
+**Colonnes** : période, journal, numéro d'écriture, date, référence
+(dérivée de `source_type`/`source_id` — rendue lisible, ex. "Dépense
+DEP-2026-0237", sans nouvelle colonne), libellé (`description`),
+compte (code + libellé), débit, crédit, source métier (`source_type`),
+centre de coût quand présent (`cost_center_id`, sinon "Non affecté").
 
-**Toutes les écritures non postées (`draft`/`submitted`/`approved`/
-`rejected`) sont exclues sans exception.** Une contre-passation
-(`reversed_entry_id` renseigné) reste une écriture `posted` normale —
-incluse comme n'importe quelle autre, son effet s'annule naturellement
-dans les totaux, aucun traitement spécial.
+**Filtres** : période **ou** journal (filtres au niveau de
+l'**écriture**, jamais du compte — voir garde ci-dessous). **Aucun
+filtre par compte sur cet état** : un filtre par compte ne montrerait
+que certaines lignes de certaines écritures, cassant la complétude
+nécessaire à l'invariant débit=crédit (c'est précisément le grand livre,
+§3, qui est la vue centrée-compte). Ce choix de conception élimine
+structurellement le piège signalé par Jean Alix Pierre plutôt que de le
+documenter comme une exception à surveiller.
 
-## 3. Vues/RPC prévues
+**Invariant testé** : `Σ débit = Σ crédit` sur tout ensemble filtré par
+période/journal (filtres d'écriture complète) — **jamais revendiqué**
+si un filtre de granularité ligne (compte, centre de coût) était ajouté
+à l'avenir sans revoir cette garantie.
 
-**Choix de conception : RPC (fonctions retournant du JSON), pas des
-vues SQL brutes** — contrairement au premier brouillon de
-`docs/phase-2-plan.md`. Raison : chaque état a besoin d'une plage de
-dates paramétrable (période unique ou exercice complet), d'une
-conversion de devise cohérente, et d'une logique de signe par type de
-compte (actif/charge = solde normal débiteur, passif/capitaux propres/
-revenu = solde normal créditeur) — un calcul, pas une simple lecture
-filtrée. Même patron déjà prouvé par `generate_papej_report` (RPC
-paramétrée, jamais une vue), pas une nouveauté architecturale.
+## 3. Grand livre
 
-Chaque RPC est `security definer`, revérifie `accounting.view` en
-interne (comme `generate_papej_report` revérifie `papej.report`) —
-RLS reste la garde de fond sur les tables sous-jacentes, la RPC ajoute
-la vérification explicite + l'agrégation :
+**Par compte** : solde d'ouverture, mouvements de la période (lignes
+détaillées débit/crédit), solde progressif (calculé ligne par ligne,
+chronologique), solde de clôture.
 
-1. **`generate_general_journal_report(p_org_id, p_period_start, p_period_end, p_journal_code default null)`**
-   → lignes chronologiques + total débit/crédit de contrôle.
-2. **`generate_general_ledger_report(p_org_id, p_period_start, p_period_end, p_account_id default null)`**
-   → si `p_account_id` fourni : mouvements d'un seul compte + solde
-   courant ligne par ligne ; sinon, tous les comptes actifs avec solde
-   de fin de période chacun.
-3. **`generate_trial_balance_report(p_org_id, p_period_start, p_period_end)`**
-   → par compte : `total_debit`, `total_credit`, `solde` (signé selon
-   le type), plus `total_debit_global`/`total_credit_global` retournés
-   explicitly pour un contrôle immédiat côté appelant.
-4. **`generate_income_statement_report(p_org_id, p_period_start, p_period_end, p_cost_center_id default null)`**
-   → revenus détaillés, charges détaillées, `resultat_net`.
-5. **`generate_balance_sheet_report(p_org_id, p_fiscal_year_id, p_as_of_date)`**
-   → actifs détaillés, passifs détaillés, capitaux propres statutaires
-   détaillés, **`resultat_non_cloture`** (calculé en interne en
-   rappelant la même logique que l'état n°4, du début de l'exercice
-   à `p_as_of_date` — jamais une nouvelle formule dupliquée),
-   `total_actif`, `total_passif_et_capitaux`.
-6. **`generate_cash_flow_report(p_org_id, p_period_start, p_period_end)`**
-   → mouvements des comptes de trésorerie réels
-   (`chart_of_accounts.id IN (select gl_account_id from cash_accounts
-   union select gl_account_id from bank_accounts union select
-   gl_account_id from mobile_money_accounts)` — **jamais un code de
-   compte codé en dur**, pour rester correct même si le comptable crée
-   d'autres comptes de trésorerie), entrées/sorties, solde net.
+**Solde d'ouverture** : `Σ (debit − credit)` de **toutes** les lignes
+d'écritures postées dont `entry_date < p_period_start`, pour ce compte
+— **jamais recalculé depuis les seuls mouvements de la période**, lu
+sur l'historique complet à chaque appel (aucune table de soldes
+pré-agrégés, pas de risque de désynchronisation).
 
-**Aucune nouvelle table.** Migration unique attendue :
-`20260823090001_financial_statement_reports.sql`.
+**Solde de clôture** = solde d'ouverture + Σ mouvements de la période
+(cohérence arithmétique interne testée explicitement).
 
-## 4. Règles de calcul
+## 4. Balance générale
 
-- **Signe par type de compte** (convention comptable standard,
-  appliquée uniformément dans les 6 RPC, jamais réimplémentée
-  différemment d'une RPC à l'autre — factorisée dans une fonction
-  interne partagée `app_private.account_normal_balance(p_type text)`) :
-  `asset`/`expense` → solde normal **débiteur** (`debit - credit`) ;
-  `liability`/`equity`/`revenue` → solde normal **créditeur**
-  (`credit - debit`).
-- **Résultat net** = `Σ(credit − debit)` des comptes `revenue` −
-  `Σ(debit − credit)` des comptes `expense`, sur la plage de dates
-  demandée. Calculé une seule fois (fonction interne partagée),
-  jamais recalculé séparément par le bilan et le compte de résultat.
-- **Bilan non clôturé** : `Total Actif = Total Passif + Total Capitaux
-  Propres statutaires (comptes réellement postés, ex. 3000/3900) +
-  Résultat non clôturé de l'exercice en cours`. C'est l'identité
-  comptable fondamentale — elle est **mathématiquement garantie** par
-  l'invariant `debit = credit` déjà vérifié à chaque posting depuis
-  1C.1 (`app_private.post_journal_entry`) : la somme signée de tous
-  les comptes de toutes les écritures postées est structurellement
-  nulle. Le test de réconciliation (§8) ne vérifie donc pas que le
-  grand livre "s'équilibre par chance", mais que **l'agrégation par
-  type dans chaque RPC est correcte** — c'est la vraie surface de
-  risque de 2B, pas l'intégrité des écritures elles-mêmes (déjà
-  prouvée).
-- **Devise** : présentation par défaut convertie en HTG au
-  `exchange_rate_to_htg` **enregistré sur chaque ligne au moment de la
-  saisie** — jamais recalculé au taux courant (ADR-006, déjà en
-  vigueur). Un paramètre optionnel `p_currency` restreint aux lignes
-  d'une devise d'origine donnée, sans conversion, pour un contrôle
-  d'audit ponctuel.
-- **Centre de coût** : lignes sans `cost_center_id` affichées sous une
-  catégorie explicite "Non affecté" — jamais silencieusement exclues
-  d'un filtre par centre de coût.
-- **Comptes désactivés** (`is_active=false`) : **jamais filtrés** dans
-  les états — un compte désactivé aujourd'hui a pu avoir des
-  mouvements réels dans le passé, qui doivent rester visibles dans
-  l'historique. `is_active` ne gouverne que la saisie future
-  (`post_journal_entry` le vérifie déjà, comportement inchangé), jamais
-  la lecture d'un état.
+**Par compte** : solde d'ouverture, total débit période, total crédit
+période, solde de clôture (débiteur ou créditeur).
 
-## 5. Contrôles multi-organisation
+**Représentation retenue** (précisée explicitement, comme demandé) :
+chaque compte porte un `solde_brut = debit_total − credit_total`
+(signe **cohérent pour tous les comptes**, jamais inversé par type) —
+c'est ce nombre dont la somme algébrique sur tous les comptes est
+**mathématiquement nulle** (conséquence directe de l'invariant
+`debit = credit` déjà garanti au posting depuis 1C.1, pas une
+coïncidence à vérifier au cas par cas). Un second champ `solde_normal`
+(positif) et un `sens` (`débiteur`/`créditeur`) sont dérivés de
+`solde_brut` selon le type de compte, **uniquement pour l'affichage**
+— jamais utilisés dans l'invariant de somme nulle.
 
-Chaque RPC prend `p_org_id` explicite et revérifie `accounting.view`
-sur cette organisation avant tout calcul (même patron
-`is_super_admin() OR has_permission(actor, p_org_id, 'accounting.view')`
-que toutes les RPC existantes) — **jamais une agrégation qui
-traverserait silencieusement plusieurs organisations**. Toutes les
-requêtes internes filtrent explicitement `organization_id = p_org_id`
-sur `journal_entries`/`journal_entry_lines`/`chart_of_accounts`, en plus
-de la RLS déjà active sur ces tables (défense en profondeur, même
-discipline que `generate_papej_report`). Isolation testée explicitement
-(§8) : un acteur d'Org B ne peut générer aucun des 6 états pour Org A.
+**Invariants testés** :
+- `Σ mouvements débit période = Σ mouvements crédit période` (tous
+  comptes confondus).
+- `Σ solde_brut de clôture (tous comptes) = 0`.
+- Grand livre ↔ balance générale : solde de clôture identique, compte
+  par compte, à montant et à centime près.
 
-## 6. Permissions
+## 5. Compte de résultat
 
-**Aucune nouvelle permission catalogue.** `accounting.view` (déjà
-seedée depuis la Phase 1A, déjà accordée à SUPER_ADMIN/COMPTABLE, et à
-DIRECTEUR_GENERAL une fois AAL2 vérifié) couvre l'intégralité des 6
-états — cohérent avec la décision déjà actée en 2A de ne jamais créer
-de permission artificielle quand l'existante suffit.
+**Porte sur une période** (`p_period_start`/`p_period_end`), pas une
+date unique. Comptes `revenue`/`expense` uniquement. Signe dérivé par
+la fonction centrale partagée `app_private.account_normal_balance()`
+(§4 de la version précédente de ce plan, inchangé) — jamais
+réimplémenté localement.
 
-## 7. Filtres
+**Résultat net = Produits − Charges**, réconcilié exactement avec les
+mêmes comptes dans la balance générale calculée sur la même période
+(même RPC de balance générale appelée en interne pour la vérification,
+jamais une deuxième formule).
 
-| Filtre | États concernés | Détail |
-|---|---|---|
-| **Période** (un mois, `accounting_periods`) | Tous | Correspond à `p_period_start`/`p_period_end` d'un seul mois |
-| **Exercice** (`fiscal_years`) | Tous | Agrège sur toutes les périodes de l'exercice, ouvertes ou fermées — la clôture d'une période bloque l'écriture, jamais la lecture |
-| **Devise** | Tous (optionnel) | HTG converti par défaut ; devise d'origine sur demande, sans conversion |
-| **Centre de coût** | Grand livre, compte de résultat | Optionnel — "Non affecté" si absent, jamais masqué |
-| **Compte unique** | Grand livre | Optionnel — vue détaillée d'un seul compte |
-| **Journal** | Journal général | Optionnel — un seul journal (ex. `CASH` seul) |
+**Garde explicite** : le résultat d'une période N'inclut **jamais**
+les produits/charges dont `entry_date` tombe hors de
+`[p_period_start, p_period_end]` — testé explicitement avec une fixture
+portant des écritures avant/après la période demandée.
 
-## 8. Exports
+## 6. Bilan
 
-**CSV côté client**, même patron déjà en place pour PAPEJ (données déjà
-autorisées par la RPC, mise en forme uniquement — jamais un second
-calcul indépendant). **Export PDF différé** sauf si vous le demandez
-explicitement (même discipline qu'en 2A/1C : ne pas construire un
-scope non demandé).
+**Calculé à une date donnée (`p_as_of_date`), jamais comme un rapport
+`period_start → period_end`.** Inclut tous les mouvements postés
+jusqu'à cette date, sans limite basse.
 
-## 9. Plan de tests
+**Résultat de l'exercice non affecté** : ligne explicite, calculée en
+appelant en interne la RPC du compte de résultat (§5) sur la plage
+`[fiscal_year.start_date, p_as_of_date]` — **jamais une nouvelle
+formule**. Équation :
 
-**Par état** (même discipline que `papej.test.ts`/`accounting-core.test.ts`) :
-exactitude arithmétique contre des écritures de test connues
-(montants choisis à la main, résultat attendu calculé indépendamment
-avant d'écrire l'assertion — jamais "ce que la fonction retourne est
-supposé correct"), exclusion stricte des écritures non postées, prise
-en compte correcte d'une contre-passation, isolation multi-organisation
-pour chacune des 6 RPC, permission `accounting.view` requise.
+```
+Actif = Passif + Capitaux propres (comptes statutaires postés) + Résultat de l'exercice non affecté
+```
 
-**Réconciliation inter-états — exigence explicite de Jean Alix Pierre,
-testée automatiquement, jamais visuellement** (`tests/integration/financial-statements-reconciliation.test.ts`,
-nouveau fichier dédié) :
-1. Fixture unique : un jeu d'écritures couvrant les 5 types de comptes
-   (actif, passif, capitaux propres, revenu, charge) + au moins une
-   contre-passation, montants choisis pour un résultat non trivial
-   (éviter les coïncidences à zéro qui masqueraient une vraie erreur
-   de signe).
-2. **Journal général** : total débit affiché = total crédit affiché.
-3. **Grand livre ↔ balance générale** : le solde de fin de période de
-   chaque compte dans le grand livre est exactement égal au `solde` de
-   ce même compte dans la balance générale.
-4. **Balance générale** : `Σ total_debit` (tous comptes) = `Σ total_credit`
-   (tous comptes).
-5. **Compte de résultat ↔ balance générale** : `resultat_net` =
-   `Σ solde` des comptes `revenue` (balance générale) −
-   `Σ solde` des comptes `expense` (balance générale).
-6. **Bilan** : `total_actif` = `total_passif_et_capitaux` (incluant le
-   résultat non clôturé) — **l'invariant central explicitement exigé**.
-7. **Flux de trésorerie ↔ grand livre** : le mouvement net des comptes
-   de trésorerie dans le flux de trésorerie = le mouvement net de ces
-   mêmes comptes dans le grand livre sur la même période.
-8. Rejeu avec une **contre-passation** incluse dans la fixture : tous
-   les invariants ci-dessus continuent de tenir (preuve que l'inclusion
-   normale d'une contre-passation, sans traitement spécial, ne casse
-   rien).
-9. Isolation multi-org sur les 6 RPC (Org B ne génère rien pour Org A).
-10. **Rejeu en une seule passe continue avant toute clôture** — même
-    exigence que 2A, pas de rattrapage final.
+**Absence de double comptage (exigence explicite)** : parce que le
+résultat non affecté est strictement borné à l'exercice **courant**
+(`fiscal_year.start_date → p_as_of_date`), tout résultat d'un exercice
+**antérieur** déjà affecté aux capitaux propres par une écriture
+comptable réelle (ex. virement manuel vers le compte 3000/3900 lors
+d'une clôture passée) est automatiquement exclu de ce calcul — il fait
+déjà partie du solde posté des comptes de capitaux propres statutaires,
+compté une seule fois, à sa place naturelle. Aucune détection spéciale
+requise : c'est une conséquence directe du bornage par date. Testé
+explicitement avec une fixture simulant un exercice antérieur déjà
+affecté.
 
-## 10. Risques d'incohérence comptable
+## 7. Flux de trésorerie — méthode directe, classification configurable
 
-| Risque | Impact | Mitigation |
-|---|---|---|
-| Signe par type de compte dupliqué/divergent entre les 6 RPC | Deux états afficheraient des chiffres différents pour la même réalité | Fonction interne unique `app_private.account_normal_balance()`, jamais réimplémentée par RPC |
-| Écriture non postée incluse par erreur (filtre `status` oublié) | Un brouillon ou une écriture rejetée fausserait un état | Filtre `status = 'posted'` explicite et testé dans chacune des 6 RPC (§9 point 1-2 le détecterait immédiatement via la réconciliation) |
-| Conversion de devise recalculée au lieu de figée | Deux lectures du même état à des moments différents donneraient des totaux différents | `exchange_rate_to_htg` toujours lu depuis la ligne, jamais recalculé (ADR-006 déjà en vigueur, juste réaffirmé ici) |
-| Comptes de trésorerie identifiés par code compte codé en dur | Un nouveau compte de trésorerie créé par le comptable serait invisible du flux de trésorerie | Identification par `gl_account_id` réel (`cash_accounts`/`bank_accounts`/`mobile_money_accounts`), jamais par code (§3) |
-| Centre de coût null traité comme "exclu" plutôt que "non affecté" | Sous-total par centre de coût ne totaliserait pas le montant global | Catégorie explicite "Non affecté", jamais un filtre silencieux |
-| Résultat non clôturé recalculé différemment par le bilan et le compte de résultat | Bilan déséquilibré sans raison métier réelle | Le bilan **rappelle** la RPC du compte de résultat en interne, ne réimplémente jamais la formule |
+**Méthode directe, explicitement** (pas indirecte, pas un mélange) :
+chaque flux de trésorerie réel est un mouvement de ligne d'écriture
+touchant un compte de trésorerie, classé selon la nature économique de
+sa **contrepartie** — jamais un rapprochement du résultat net avec des
+ajustements non-monétaires (ce que ferait la méthode indirecte, non
+implémentée en 2B).
 
-## 11. Critères de clôture (même discipline que 2A)
+**Identification des comptes de trésorerie** (déjà approuvé, inchangé) :
+`chart_of_accounts.id ∈ (gl_account_id de cash_accounts ∪ bank_accounts
+∪ mobile_money_accounts)` — jamais un code compte codé en dur.
 
-Migration appliquée et vérifiée ; RLS/RBAC testées (positif/négatif,
-isolation multi-org) ; les 10 invariants de réconciliation (§9) verts en
-une seule passe continue ; typecheck/lint/build propres ; scan secrets
-propre ; `git status` propre ; **Advisors** — pas de nouvelle vérification
-cloud attendue (aucune nouvelle table, seulement des RPC `SECURITY DEFINER`
-suivant exactement le patron déjà audité en Phase 1C/2A — recontrôle
-structurel via `debug_security_definer_without_search_path`/
-`debug_unwanted_function_grants` avant clôture, comme en 2A) ; rapport de
-clôture `docs/phase-2b-closing-report.md` ; puis arrêt pour validation
-avant 2C.
+**Classification (nouveau, exigé)** : nouvelle colonne
+`chart_of_accounts.cash_flow_category text check (in ('operating',
+'investing', 'financing'))`, **nullable, configurable par le
+comptable** via l'UI plan comptable existante (2A) — pas une nouvelle
+table, pas une règle hors du plan comptable. Pour chaque écriture
+touchant un compte de trésorerie :
+- Si l'écriture ne touche qu'**un seul** compte de trésorerie et qu'au
+  moins une contrepartie non-trésorerie porte une
+  `cash_flow_category` renseignée → flux classé dans cette catégorie.
+- Si les deux côtés de l'écriture sont des comptes de trésorerie
+  (virement interne caisse↔banque) → **exclu** du détail par
+  catégorie (un virement interne n'est pas un flux économique, il ne
+  change pas le total trésorerie) — visible séparément comme "virement
+  interne", jamais compté deux fois ni classé arbitrairement.
+- Si la contrepartie n'a **aucune** `cash_flow_category` renseignée, ou
+  si plusieurs contreparties de catégories différentes coexistent sur
+  la même écriture sans classification unique possible → **`UNCLASSIFIED`**,
+  **signalé explicitement** (jamais deviné, jamais absorbé
+  silencieusement dans une autre catégorie).
+
+**Seed de classification proposé pour les 18 comptes existants** (point
+de départ raisonnable, entièrement modifiable ensuite) :
+
+| Compte | Catégorie proposée |
+|---|---|
+| 1100 Créances clients | operating |
+| 1500/1510 Immobilisations | investing |
+| 1590 Amortissements cumulés | investing |
+| 2100 Dettes fournisseurs | operating |
+| 2200 Emprunt FDI | financing |
+| 2900 Fonds affectés | operating |
+| 3000 Capital / Apport fondateurs | financing |
+| 4000/4010/4900 Revenus | operating |
+| 6000/6100/6200/6800 Charges | operating |
+| 1000/1010/1020 (trésorerie elle-même) | non applicable (jamais contrepartie d'elle-même) |
+| 3900 Résultat de l'exercice | non classifié par défaut (rarement touché directement par une écriture de trésorerie) |
+
+**Réconciliation exigée** :
+```
+Trésorerie d'ouverture + Σ flux nets (operating + investing + financing + UNCLASSIFIED) = Trésorerie de clôture
+```
+Trésorerie d'ouverture/de clôture calculées exactement comme le solde
+d'ouverture/de clôture du grand livre (§3) pour l'ensemble des comptes
+de trésorerie — **doit être identique au grand livre**, pas une
+deuxième formule.
+
+## 8. Devises
+
+État officiel consolidé **exclusivement en HTG**, devise fonctionnelle
+de l'organisation, en utilisant `exchange_rate_to_htg` **enregistré
+historiquement sur chaque ligne** — jamais réévalué au taux courant
+(ADR-006, inchangé). Un filtre `p_currency` optionnel offre une **vue
+analytique** restreinte à une devise d'origine (sans conversion) — il
+ne remplace jamais l'état fonctionnel consolidé, qui reste le seul état
+"officiel" retourné par défaut sans ce paramètre.
+
+## 9. Centres de coûts
+
+Filtre disponible uniquement là où `journal_entry_lines.cost_center_id`
+est réellement renseigné (colonne déjà persistée depuis 1C.3) — jamais
+reconstruit après coup depuis `expense_requests.cost_center_id` ou tout
+autre module métier, ce qui violerait le principe "le grand livre fait
+foi" (§0). Lignes sans centre de coût affichées sous "Non affecté",
+jamais exclues silencieusement.
+
+## 10. RPC et sécurité
+
+6 RPC `SECURITY DEFINER`, `search_path` fixe (`set search_path = public,
+app_private`, même patron que toutes les RPC existantes) :
+1. `generate_general_journal_report`
+2. `generate_general_ledger_report`
+3. `generate_trial_balance_report`
+4. `generate_income_statement_report`
+5. `generate_balance_sheet_report`
+6. `generate_cash_flow_report`
+
+Chacune : filtre `status = 'posted'` uniquement ; dérive
+l'organisation de `p_org_id` **et** revérifie
+`is_super_admin(auth.uid()) OR has_permission(auth.uid(), p_org_id,
+'accounting.view')` avant tout calcul (jamais une confiance implicite
+dans le paramètre) ; `revoke all ... from public` puis `grant execute
+... to authenticated` uniquement — **jamais `service_role` exposé** à
+un rôle applicatif ; toute requête interne filtre explicitement
+`organization_id = p_org_id` en plus de la RLS déjà active sur les
+tables sous-jacentes (défense en profondeur, même patron que
+`generate_papej_report`).
+
+**Tests obligatoires par RPC** : `anon` refusé (42501, `EXECUTE` absent
+au niveau grant — même famille que `phase1c-anon-refusal.test.ts`),
+EMPLOYE refusé (`not_authorized`, pas de `accounting.view`), SUPPORT
+refusé (idem), acteur d'une autre organisation refusé/vide, COMPTABLE
+autorisé (contrôle positif).
+
+## 11. Exports — PDF et CSV
+
+**Obligatoire pour les 5 états principaux** (journal général, grand
+livre, balance générale, compte de résultat, bilan) **et pour le flux
+de trésorerie**, puisque sa version complète (avec classification) fait
+partie de ce périmètre 2B. PDF et CSV **appellent exactement la même
+RPC que l'écran, avec exactement les mêmes filtres** — même patron
+strict que `app/api/papej/[grantId]/rapport-pdf/route.ts` (Route
+Handler dédié, `lib/pdf/*-report.ts` avec `pdf-lib`, `winAnsiSafe`
+réutilisée). Aucun second calcul indépendant possible par construction.
+
+## 12. Plan de tests — invariants de réconciliation (renforcé)
+
+Fichier dédié `tests/integration/financial-statements-reconciliation.test.ts`,
+hermétique dès le départ (`FixtureRegistry`). En plus des invariants
+déjà prévus (journal général équilibré sur périmètre d'écritures
+complètes, grand livre ↔ balance générale, balance générale Σ=0,
+compte de résultat ↔ balance générale, bilan Actif=Passif+CP+Résultat,
+flux de trésorerie ↔ grand livre, isolation multi-org, contre-passation
+incluse sans traitement spécial) — **ajouts exigés par Jean Alix
+Pierre, tous couverts** :
+
+- Bilan à une date donnée avec écritures **antérieures à la période**
+  demandée (prouve l'inclusion complète jusqu'à `p_as_of_date`, pas
+  seulement la période "courante").
+- Solde d'ouverture du grand livre non nul (fixture avec écritures
+  avant `p_period_start`).
+- Balance générale : ouverture/mouvements/clôture cohérents
+  arithmétiquement (`clôture = ouverture + mouvements`).
+- Résultat d'une période **n'incluant pas** les produits/charges hors
+  période (fixture avec écritures avant et après la plage demandée).
+- Exercice précédent déjà affecté aux capitaux propres, **sans double
+  comptage** dans le résultat non affecté de l'exercice courant (§6).
+- `Trésorerie d'ouverture + flux nets = Trésorerie de clôture`.
+- Flux non classifiable → **`UNCLASSIFIED`** explicitement, jamais une
+  classification devinée.
+- **Même état écran/CSV/PDF sur les mêmes filtres** — comparaison
+  directe des montants extraits du PDF (`pdf-parse`, même technique que
+  `papej-pdf-export.spec.ts`) contre la réponse JSON de la RPC.
+- Contre-passation incluse naturellement par ses lignes comptables
+  (aucun traitement spécial requis, testé explicitement).
+- Isolation multi-organisation sur les 6 RPC **et** sur les deux
+  Route Handlers d'export (PDF/CSV).
+
+**Rejeu complet en une seule passe continue avant toute clôture** —
+même exigence non négociable qu'en 2A.
+
+## 13. Critères de clôture (inchangés, rappelés)
+
+Migration (colonne `cash_flow_category` + seed + 6 RPC) appliquée et
+vérifiée ; RLS/RBAC testées (positif/négatif/anon/autre organisation) ;
+tous les invariants de réconciliation §12 verts en une seule passe
+continue ; E2E (au moins un parcours par état, export PDF/CSV
+vérifié) ; typecheck/lint/build propres ; recontrôle structurel Advisors
+(`debug_security_definer_without_search_path`/
+`debug_unwanted_function_grants`, même discipline qu'en 2A) ; scan
+secrets propre ; `git status` propre ; `docs/phase-2b-closing-report.md` ;
+puis **arrêt pour validation avant 2C**.
 
 ---
 
-**Aucune ligne de code, migration ou test n'a été écrite pour Phase 2B.**
-Je m'arrête ici pour votre validation du périmètre et de la conception
-ci-dessus avant d'écrire quoi que ce soit.
+**Phase 2B est autorisée à démarrer sur cette base. Aucune ligne de
+Phase 2C n'a été commencée et ne le sera pas avant validation
+explicite.**
