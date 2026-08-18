@@ -97,6 +97,7 @@ export type Database = {
       }
       chart_of_accounts: {
         Row: {
+          cash_flow_category: string | null
           code: string
           created_at: string
           created_by: string | null
@@ -110,6 +111,7 @@ export type Database = {
           updated_by: string | null
         }
         Insert: {
+          cash_flow_category?: string | null
           code: string
           created_at?: string
           created_by?: string | null
@@ -123,6 +125,7 @@ export type Database = {
           updated_by?: string | null
         }
         Update: {
+          cash_flow_category?: string | null
           code?: string
           created_at?: string
           created_by?: string | null
@@ -3078,8 +3081,37 @@ export type Database = {
         Args: { p_schema?: string }
         Returns: { function_signature: string; grantee: string }[]
       }
+      generate_balance_sheet_report: {
+        Args: { p_as_of_date: string; p_fiscal_year_id: string; p_org_id: string }
+        Returns: Json
+      }
+      generate_cash_flow_report: {
+        Args: { p_org_id: string; p_period_end: string; p_period_start: string }
+        Returns: Json
+      }
+      generate_general_journal_report: {
+        Args: { p_journal_code?: string; p_org_id: string; p_period_end: string; p_period_start: string }
+        Returns: Json
+      }
+      generate_general_ledger_report: {
+        Args: { p_account_id?: string; p_org_id: string; p_period_end: string; p_period_start: string }
+        Returns: Json
+      }
+      generate_income_statement_report: {
+        Args: {
+          p_cost_center_id?: string
+          p_org_id: string
+          p_period_end: string
+          p_period_start: string
+        }
+        Returns: Json
+      }
       generate_papej_report: {
         Args: { p_grant_id: string; p_period_end: string; p_period_start: string }
+        Returns: Json
+      }
+      generate_trial_balance_report: {
+        Args: { p_org_id: string; p_period_end: string; p_period_start: string }
         Returns: Json
       }
       justify_expense_request: {

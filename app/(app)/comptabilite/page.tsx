@@ -55,11 +55,16 @@ export default async function ComptabilitePage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-mf-navy-900">Comptabilite</h1>
-        <p className="text-sm text-slate-500">
-          Plan comptable, journaux, exercices/periodes, ecritures (automatiques et manuelles).
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-mf-navy-900">Comptabilite</h1>
+          <p className="text-sm text-slate-500">
+            Plan comptable, journaux, exercices/periodes, ecritures (automatiques et manuelles).
+          </p>
+        </div>
+        <Link href="/comptabilite/rapports" className="rounded-lg border border-mf-border px-4 py-2 text-sm font-semibold text-mf-navy-700 hover:bg-slate-50">
+          Etats financiers
+        </Link>
       </div>
 
       {/* --- Ecritures --- */}
