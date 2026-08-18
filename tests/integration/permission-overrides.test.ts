@@ -146,7 +146,31 @@ describe('Overrides de permission individuels (ALLOW/DENY)', () => {
     expect(data).toBe(false)
   })
 
-  it('un override expire n\'a plus d\'effet', async () => {
+  // --- Ancien test "un override expire n'a plus d'effet" : REMPLACE -------
+  // Trouvaille reelle (retour de Jean Alix Pierre, cloture Phase 2B) :
+  // l'ancienne version calculait expires_at cote client (Date.now() +
+  // marge fixe de 10s) puis ATTENDAIT reellement que ce delai s'ecoule
+  // avant de re-verifier — un scenario a la fois "avant expiration" et
+  // "apres expiration" dans le MEME test, chacun sensible a la latence
+  // reseau du seul insert+signIn qui le precede. Repro directe (script
+  // isole, hors suite) : un insert isole a mesure ~9,86s dans cet
+  // environnement — devorant a lui seul la quasi-totalite de la marge de
+  // 10s et faisant echouer l'assertion "avant expiration" (accorde tant
+  // que non expire) meme si la logique RBAC est correcte.
+  //
+  // Correction : deux tests distincts, chacun DETERMINISTE, aucune
+  // attente de temps reel. La contrainte CHECK de la table est purement
+  // relative entre ses deux propres colonnes — jamais une comparaison a
+  // l'horloge courante (`expires_at is null or expires_at > created_at`,
+  // voir supabase/migrations/20260813100004_roles_permissions_rbac.sql
+  // ligne 133) — donc un override peut etre cree DEJA expire en reculant
+  // created_at ET expires_at tous deux dans le passe (aucun trigger
+  // BEFORE ne force created_at a `now()` reel ; seul un trigger AFTER
+  // d'audit existe, cf. 20260813100006_audit_triggers.sql). Aucune regle
+  // metier RBAC n'est modifiee ici — uniquement la strategie de creation
+  // de donnees de test.
+
+  it('un override GRANT non expire (expiration lointaine) produit l\'effet attendu — aucune dependance au timing', async () => {
     const admin = adminClient()
     const { data: permission } = await admin
       .from('permissions')
@@ -154,54 +178,77 @@ describe('Overrides de permission individuels (ALLOW/DENY)', () => {
       .eq('code', 'asset.view')
       .single()
 
-    // La contrainte CHECK (expires_at is null or expires_at > created_at)
-    // interdit de creer un override "deja expire" — on cree une expiration
-    // proche dans le futur puis on attend qu'elle passe, pour tester le
-    // comportement reel du "point dans le temps" plutot qu'une donnee
-    // invalide. Trouvaille reelle contre le cloud : expires_at est calcule
-    // cote client AVANT l'appel reseau, et la latence de ce sandbox
-    // (TLS/egress) est fortement variable — observee jusqu'a ~3.7s sur un
-    // seul insert — donc toute marge fixe choisie a l'avance peut se faire
-    // rattraper par created_at (echec de la contrainte CHECK cote serveur).
-    // Marge genereuse (10s, tolere une latence bien superieure a tout ce
-    // qui a ete observe) + attente RECALCULEE apres coup a partir de
-    // expires_at reellement enregistre (pas d'un total fixe devine a
-    // l'avance) : correct quelle qu'ait ete la latence de cet insert
-    // precis. Sans lien avec RLS — cet insert utilise le client
-    // service_role, qui ignore RLS.
-    const EXPIRY_MARGIN_MS = 10_000
-    const WAIT_BUFFER_MS = 1500
-    const { data: override, error: insertError } = await admin
+    // Expiration a 24h : par construction, jamais rattrapable par la
+    // duree du test, quelle que soit la latence observee.
+    const { data: override, error } = await admin
       .from('user_permission_overrides')
       .insert({
         user_id: employeUserId,
         organization_id: orgA,
         permission_id: (permission as { id: string }).id,
         effect: 'grant',
-        reason: 'Test integration — override bientot expire',
+        reason: 'Test integration — override actif (expiration lointaine)',
         granted_by: employeUserId,
-        expires_at: new Date(Date.now() + EXPIRY_MARGIN_MS).toISOString(),
+        expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
       })
-      .select('id, expires_at')
+      .select('id')
       .single()
-    expect(insertError, `insertion de l'override : ${JSON.stringify(insertError)}`).toBeNull()
+    expect(error).toBeNull()
     overrideIds.push((override as { id: string }).id)
 
     const { client } = await signInAs('employe.demo@medfinder.test')
-
-    const beforeExpiry = await client.rpc('current_user_has_permission', {
+    const { data } = await client.rpc('current_user_has_permission', {
       p_org_id: orgA,
       p_permission_code: 'asset.view',
     })
-    expect(beforeExpiry.data, 'accorde tant que non expire').toBe(true)
+    expect(data, 'accorde tant que non expire').toBe(true)
+  })
 
-    const remainingMs = new Date((override as { expires_at: string }).expires_at).getTime() - Date.now()
-    await new Promise((resolve) => setTimeout(resolve, Math.max(0, remainingMs) + WAIT_BUFFER_MS))
+  it('un override deja expire (horodatage recule cote serveur, deterministe) n\'a plus d\'effet', async () => {
+    const admin = adminClient()
+    // Code de permission DISTINCT du test precedent ('asset.view') —
+    // trouvaille reelle en ecrivant ce fichier : le nettoyage de ce
+    // describe se fait uniquement en afterAll (efficacite reseau, pas par
+    // test), donc l'override "expiration lointaine" du test precedent
+    // reste actif en base pendant celui-ci ; reutiliser le meme code de
+    // permission aurait fait passer ce test pour une mauvaise raison (le
+    // grant TOUJOURS actif du test precedent, jamais celui, expire, cree
+    // ici). Meme convention que les 3 tests plus haut dans ce fichier
+    // (employee.create/leave.request/audit.view), chacun deja sur un code
+    // distinct pour la meme raison.
+    const { data: permission } = await admin
+      .from('permissions')
+      .select('id')
+      .eq('code', 'asset.manage')
+      .single()
 
-    const afterExpiry = await client.rpc('current_user_has_permission', {
+    // Ne "vient" jamais a expirer pendant le test : nait deja expire.
+    // created_at recule d'1h, expires_at recule de 30min — satisfait la
+    // contrainte CHECK (expires_at > created_at) tout en etant deja
+    // depasse par rapport a l'horloge reelle au moment de l'insertion.
+    const now = Date.now()
+    const { data: override, error } = await admin
+      .from('user_permission_overrides')
+      .insert({
+        user_id: employeUserId,
+        organization_id: orgA,
+        permission_id: (permission as { id: string }).id,
+        effect: 'grant',
+        reason: 'Test integration — override deja expire (deterministe)',
+        granted_by: employeUserId,
+        created_at: new Date(now - 60 * 60 * 1000).toISOString(),
+        expires_at: new Date(now - 30 * 60 * 1000).toISOString(),
+      })
+      .select('id')
+      .single()
+    expect(error).toBeNull()
+    overrideIds.push((override as { id: string }).id)
+
+    const { client } = await signInAs('employe.demo@medfinder.test')
+    const { data } = await client.rpc('current_user_has_permission', {
       p_org_id: orgA,
-      p_permission_code: 'asset.view',
+      p_permission_code: 'asset.manage',
     })
-    expect(afterExpiry.data, 'un override expire ne doit plus accorder la permission').toBe(false)
+    expect(data, 'un override expire ne doit plus accorder la permission').toBe(false)
   })
 })
