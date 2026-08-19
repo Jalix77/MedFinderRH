@@ -284,10 +284,13 @@ transparence, aucune migration correspondante n'a été appliquée.
 > **seul ce bloc fait foi**. Aucun total ici n'est reconstitué à partir
 > de plusieurs exécutions.
 
-**Date : 18/08/2026, après correction déterministe de
-`permission-overrides.test.ts` (commit `80ac8fe`).**
+**Date : 19/08/2026, après le rejeu RÉEL du Security Advisor par Jean
+Alix Pierre et le correctif `function_search_path_mutable`
+(migration `20260824090001`).**
 
 ## A. Dernière passe continue complète — intégration
+
+**A.1 — Passe de référence (avant le correctif Advisor), 18/08/2026**
 
 | | |
 |---|---|
@@ -298,27 +301,60 @@ transparence, aucune migration correspondante n'a été appliquée.
 | Occurrences `Request rate limit reached` | **0** |
 | Rejeux ciblés inclus dans ce total | **aucun** |
 
-C'est la **première et seule passe intégration continue, complète et
-entièrement verte** de Phase 2B. Elle a été obtenue après ~20 minutes
-sans activité d'authentification (récupération du quota Auth), sans
-aucun contournement des protections Supabase.
+Première et seule passe intégration continue, complète et entièrement
+verte, obtenue après ~20 min sans activité d'authentification.
 
-*(210 et non 209 : le fichier `permission-overrides.test.ts` compte
-désormais 6 tests au lieu de 5 — l'ancien test unique mêlant
-« avant expiration » et « après expiration » a été scindé en deux tests
-déterministes, cf. §D.)*
+**A.2 — Passe de régression après le correctif Advisor, 19/08/2026**
 
-## B. Tests Phase 2A/2B (comptabilité) dans cette même passe continue
+| | |
+|---|---|
+| Portée | 21 fichiers / **214 tests** (+1 fichier, +4 tests : `search-path-hardening.test.ts`) |
+| Résultat | **138 passés / 76 échecs** |
+| Échecs `Request rate limit reached` | **76 sur 76 — appariement vérifié ligne à ligne** |
+| Échecs métier réels | **0** |
 
-| Fichier | Tests | Résultat dans la passe §A |
-|---|---:|---|
-| `financial-statements-reconciliation.test.ts` (Phase 2B) | 17 | ✅ propre |
-| `manual-journal-entries.test.ts` (Phase 2A) | 15 | ✅ propre |
-| `accounting-core.test.ts` (Phase 1C/2A) | 16 | ✅ propre |
-| **Total comptabilité** | **48** | **48/48 dans la passe continue unique** |
+**Limitation d'infrastructure documentée, non contournée** : cette passe
+a été lancée **immédiatement après** deux autres exécutions (38 tests
+sécurité, puis 50 tests comptabilité), soit ~3 lots consécutifs — ce qui
+épuise mécaniquement le quota de connexions Auth du projet démo partagé.
+Conformément à votre consigne, **aucun rejeu supplémentaire n'a été
+lancé pour fabriquer un résultat vert**. La couverture de régression
+réelle est apportée par §A.3 et §B, exécutés chacun en une passe propre.
+`search-path-hardening.test.ts` et
+`financial-statements-reconciliation.test.ts` sont **passés même dans
+cette exécution dégradée**.
 
-Vérifié par recherche explicite : zéro occurrence de ces trois fichiers
-dans les lignes d'échec du journal d'exécution.
+**A.3 — Tests sécurité ciblés (une seule exécution, propre), 19/08/2026**
+
+| Fichier | Résultat |
+|---|---|
+| `search-path-hardening.test.ts` (**nouveau**) | ✅ |
+| `security-definer-audit.test.ts` | ✅ |
+| `privilege-audit.test.ts` | ✅ |
+| `phase1c-anon-refusal.test.ts` | ✅ |
+| **Total** | **38/38 — 0 échec, 0 rate limit** |
+
+## B. Tests Phase 2A/2B (comptabilité)
+
+> **Correction d'un chiffre erroné de mes rapports antérieurs** :
+> j'avais indiqué `accounting-core.test.ts` = 16 tests et un total de
+> **48**. Le décompte réel des tests déclarés est **18**, donc **50**.
+> Le rapport de clôture Phase 2A indiquait déjà 18 — c'est mon report
+> Phase 2B qui était faux. **50 est le chiffre correct.**
+
+| Fichier | Tests | Passe §A.1 (18/08) | Passe dédiée 19/08 |
+|---|---:|---|---|
+| `financial-statements-reconciliation.test.ts` (Phase 2B) | 17 | ✅ | ✅ |
+| `manual-journal-entries.test.ts` (Phase 2A) | 15 | ✅ | ✅ |
+| `accounting-core.test.ts` (Phase 1C/2A) | 18 | ✅ | ✅ |
+| **Total comptabilité** | **50** | **50/50** | **50/50 (une seule exécution, 96 s, 0 rate limit)** |
+
+La passe dédiée du 19/08 couvre aussi la **non-régression fonctionnelle
+du trigger corrigé** : `manual-journal-entries.test.ts` vérifie qu'un
+compte utilisé par une écriture reste **non supprimable** même via
+`service_role`, et qu'un compte jamais utilisé **reste supprimable** —
+les deux comportements sont inchangés après l'ajout de
+`set search_path = ''`.
 
 ## C. Dernière passe complète — E2E
 
@@ -405,16 +441,80 @@ git grep eyJhbGci        # 0 resultat reel
 git status --short       # vide (arbre propre)
 ```
 
-## G. Advisors — EN ATTENTE DE VOTRE REJEU MANUEL
+## G. Security Advisor — décompte par catégorie
 
-L'audit structurel des 6 RPC (§3, §9, §11) est une **preuve
-complémentaire, jamais un substitut** au résultat réel des Advisors.
-Vous avez indiqué effectuer vous-même le rejeu manuel du Security
-Advisor et du Performance Advisor et me transmettre les résultats.
-**Ce point reste ouvert jusqu'à réception.**
+### G.0 — Distinction essentielle : tests internes ≠ Security Advisor
 
-## H. Conclusion
+**Mes vérifications `debug_*` ne valent pas le Security Advisor Supabase
+et ne doivent jamais être présentées comme équivalentes.** Preuve
+factuelle, pas théorique : le rejeu réel de l'Advisor (18/08/2026) a
+révélé `app_private.chart_of_accounts_immutable_if_used` — que mes
+`debug_*` affichaient pourtant à « 0 résultat ».
 
-Phase 2B **n'est pas déclarée définitivement clôturée** : elle reste en
-attente (a) du résultat réel des Advisors, (b) de votre validation
-explicite. **Aucune ligne de Phase 2C n'a été commencée.**
+**Cause exacte, structurelle** :
+`debug_security_definer_without_search_path` filtre sur `p.prosecdef`,
+donc **SECURITY DEFINER uniquement**. La fonction incriminée est une
+fonction **trigger ordinaire** : elle était **hors du champ** de ma
+vérification, qui ne pouvait pas la détecter — quel que soit le nombre
+de rejeux. Le lint Supabase couvre **toutes** les fonctions.
+
+Correctif du trou de détection :
+`public.debug_functions_with_mutable_search_path` (sans filtre
+`prosecdef`) + `tests/integration/search-path-hardening.test.ts`. Cette
+nouvelle vérification sert à détecter une **régression entre deux rejeux
+manuels de l'Advisor** — elle ne permet toujours pas d'affirmer
+« 0 avertissement Advisor ».
+
+### G.1 — Décompte par catégorie
+
+| Catégorie | Avertissement | Nb | Disposition |
+|---|---|---:|---|
+| **CORRIGÉ** | `function_search_path_mutable` → `app_private.chart_of_accounts_immutable_if_used` | 1 | ✅ Corrigé par `20260824090001` (`set search_path = ''`, standard de `20260816090014`). Vérifié live : la fonction n'apparaît plus. Balayage des **78 fonctions** : aucune autre concernée |
+| **AUDITÉ ET ACCEPTÉ** | `authenticated_security_definer_function_executable` — 6 RPC Phase 2B | 6 | ⚠️ Attendu. Exposition nécessaire et prouvée sûre (§G.2). **Ni passées en SECURITY INVOKER, ni `authenticated` révoqué** |
+| **AUDITÉ ET ACCEPTÉ** | `authenticated_security_definer_function_executable` — RPC Phase 1C/2A | 23 | ⚠️ Inchangées : aucune migration 2B ne les redéfinit (vérifié). **Non rouvertes** |
+| **LIMITATION PLATEFORME** | `auth_leaked_password_protection` | 1 | 🔒 Fonctionnalité exigeant le plan Pro. **Pas un défaut applicatif**. Position inchangée depuis Phase 1C |
+
+**Je n'affirme donc PAS « Security Advisor = 0 warning ».** Le résultat
+attendu après correctif est : **1 corrigé**, **29 audités et acceptés**
+(6 + 23, `SECURITY DEFINER` intentionnels), **1 limitation de
+plateforme** — soit **30 avertissements qui subsistent légitimement**.
+Ce décompte doit être confirmé par votre prochain rejeu de l'Advisor.
+
+### G.2 — Audit des 6 RPC Phase 2B (preuves exigées)
+
+| Preuve | Constat |
+|---|---|
+| Exposition `authenticated` intentionnelle | ✅ `grant execute … to authenticated` explicite — l'écran et l'export PDF s'exécutent sous la session de l'utilisateur |
+| `PUBLIC`/`anon` ne peuvent exécuter | ✅ `revoke all … from public`, aucun grant `anon`. Testé : `anon` → **`42501`** sur les 6 |
+| `search_path` explicitement fixé | ✅ `set search_path = public, app_private` sur les 6 |
+| `accounting.view` contrôlé | ✅ **première instruction** de chaque corps : `is_super_admin(auth.uid()) OR has_permission(auth.uid(), p_org_id, 'accounting.view')` |
+| Org A ≠ Org B | ✅ testé : acteur Org B avec `p_org_id` d'Org A → `not_authorized` sur les 6 |
+| Authentifié sans `accounting.view` | ✅ EMPLOYE et SUPPORT → `not_authorized` sur les 6 |
+| **`p_org_id` client non contournable** | ✅ `has_permission` appelle d'abord `is_active_member(auth.uid(), p_org_id)`. L'acteur vient de `auth.uid()` (jeton signé, jamais d'un paramètre) ; `p_org_id` est **recroisé** avec l'appartenance réelle → un `p_org_id` arbitraire échoue avant tout accès. Pas d'IDOR |
+
+Défense supplémentaire : chaque requête filtre
+`je.organization_id = p_org_id` **et** `je.status = 'posted'` ; le bilan
+valide en plus que `p_fiscal_year_id` appartient bien à `p_org_id`.
+
+### G.3 — Performance Advisor
+
+Phase 2B n'ajoute **aucune table, aucune policy RLS, aucun index**
+(vérifié par `grep` des deux migrations). Aucun changement attendu.
+
+## H. E2E — option 1 retenue
+
+Recherche d'un **22/22 en une seule passe propre** reportée à une
+session réellement reposée (serveur dev redémarré, aucun autre runner,
+latence Auth normale et stable, aucune suite d'intégration lancée juste
+avant). **Aucun code métier modifié, aucun timeout Playwright gonflé.**
+Constat à ce jour : l'ensemble des tests en échec **change à chaque
+passe** (17/22, puis 21/22, puis 15/22), aucun échec métier reproductible,
+toutes les routes répondent avec les codes attendus, et les **5/5 tests
+Phase 2B sont verts** dans la meilleure passe.
+
+## I. Conclusion
+
+Phase 2B **n'est pas déclarée définitivement clôturée**. Restent :
+(a) confirmation du décompte §G.1 par votre prochain rejeu de l'Advisor ;
+(b) le 22/22 E2E en session reposée ; (c) votre validation explicite.
+**Aucune ligne de Phase 2C n'a été commencée.**

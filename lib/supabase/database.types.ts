@@ -3077,6 +3077,14 @@ export type Database = {
         }
         Returns: Json
       }
+      debug_functions_with_mutable_search_path: {
+        Args: { p_schema?: string }
+        Returns: { function_signature: string; is_security_definer: boolean }[]
+      }
+      debug_security_definer_without_search_path: {
+        Args: { p_schema?: string }
+        Returns: { function_signature: string }[]
+      }
       debug_unwanted_function_grants: {
         Args: { p_schema?: string }
         Returns: { function_signature: string; grantee: string }[]
