@@ -58,10 +58,23 @@ table renommée, aucune contrainte existante affaiblie.
 
 ## §2 — Nouvelles tables et colonnes
 
-### 2.1 `public.third_parties` — référentiel unique clients/fournisseurs
+### 2.1 `public.third_parties` — référentiel unique, identité canonique
 
-Table **unique** (et non deux tables séparées) car un tiers peut être
-**client ET fournisseur**, exigence explicite du périmètre.
+**Décision arbitrée n°4** : référentiel **unique**, jamais deux tables
+d'identité indépendantes. Un même tiers peut porter **les deux rôles**
+`CUSTOMER` et `SUPPLIER`. C'est cette identité unique que
+`journal_entry_lines.third_party_id` référencera.
+
+> **Note d'implémentation sur les rôles.** Les rôles sont portés par
+> deux drapeaux booléens `is_customer` / `is_supplier` **sur la table
+> elle-même**, plutôt que par une table enfant `third_party_roles`.
+> Raison : les policies RLS doivent arbitrer `customer.manage` vs
+> `supplier.manage` **au moment même de l'INSERT** de la fiche ; avec
+> une table enfant, les rôles n'existent pas encore à cet instant
+> (l'enfant est inséré après le parent), ce qui rendrait la garde
+> inopérante ou obligerait à un contournement. Les deux drapeaux
+> expriment exactement les rôles demandés, sur une identité unique.
+> ▶ *Signalez-le si vous préférez malgré tout une table enfant.*
 
 | Colonne | Type | Notes |
 |---|---|---|
@@ -74,8 +87,7 @@ Table **unique** (et non deux tables séparées) car un tiers peut être
 | `is_supplier` | boolean NOT NULL DEFAULT false | |
 | `tax_id` | text NULL | **NIF / identifiant fiscal** — format **non contraint** (§15) |
 | `legal_form` | text NULL | SA, SARL, individuel… (libre) |
-| `email`, `phone` | text NULL | Contact principal |
-| `address_line1`, `address_line2`, `city`, `department`, `country` | text NULL | Adresse principale (facturation) |
+| `email`, `phone` | text NULL | Coordonnées principales de l'entité |
 | `preferred_currency` | char(3) NOT NULL DEFAULT `'HTG'` | CHECK `in ('HTG','USD')` |
 | `payment_terms_days` | integer NOT NULL DEFAULT 0 | Base du calcul d'échéance |
 | `receivable_account_id` | uuid NULL → `chart_of_accounts` | Surcharge du compte collectif 1100 |
@@ -84,11 +96,24 @@ Table **unique** (et non deux tables séparées) car un tiers peut être
 | `notes` | text NULL | |
 | `created_at`/`updated_at`/`created_by`/`updated_by` | | Conventions existantes |
 
-### 2.2 `public.third_party_contacts` — contacts multiples
+### 2.2 Tables enfants du tiers — **décision arbitrée n°6**
 
-`id`, `organization_id`, `third_party_id` (→ `third_parties`, ON DELETE
-CASCADE), `full_name` NOT NULL, `role_title`, `email`, `phone`,
-`is_primary` boolean, timestamps.
+Tables enfants **simples**, sans CRM (ni opportunités, ni activités, ni
+historique d'interactions).
+
+**`public.third_party_contacts`** : `id`, `organization_id`,
+`third_party_id` (→ `third_parties`, ON DELETE CASCADE), `full_name`
+NOT NULL, `role_title`, `email`, `phone`, `is_primary` boolean, `notes`,
+timestamps.
+
+**`public.third_party_addresses`** : `id`, `organization_id`,
+`third_party_id` (→ `third_parties`, ON DELETE CASCADE),
+`address_type` CHECK `in ('billing','shipping','other')`,
+`address_line1` NOT NULL, `address_line2`, `city`, `department`,
+`country` (défaut `'Haiti'`), `is_primary` boolean, timestamps.
+
+> Index unique partiel garantissant **au plus une** adresse principale
+> et **au plus un** contact principal par tiers.
 
 ### 2.3 `public.tax_rates` — fiscalité **configurable, jamais codée en dur**
 
@@ -105,8 +130,18 @@ reverser), `is_active` boolean, timestamps.
 
 | Colonne | Type | Notes |
 |---|---|---|
+> **Décision arbitrée n°3 — modèle documentaire UNIFIÉ.** Les avoirs ne
+> sont **pas** une table ni un workflow comptable parallèle : ils sont
+> le **même document** avec `document_type = 'CREDIT_NOTE'`. Une seule
+> table, un seul jeu de RPC, un seul générateur PDF, un seul jeu de
+> règles d'immutabilité — mais une **numérotation séparée**.
+
+| Colonne | Type | Notes |
+|---|---|---|
 | `id`, `organization_id` | | |
-| `invoice_number` | text NOT NULL | Assigné **à l'émission**, pas au brouillon (§7) |
+| **`document_type`** | text NOT NULL DEFAULT `'INVOICE'` | CHECK `in ('INVOICE','CREDIT_NOTE')` |
+| `document_number` | text NOT NULL | Assigné **à l'émission** ; séquence **`customer_invoice`** ou **`credit_note`** selon `document_type` |
+| **`credited_invoice_id`** | uuid NULL → `customer_invoices` | Renseigné pour un avoir rattaché à une facture ; NULL pour un avoir général |
 | `third_party_id` | uuid NOT NULL → `third_parties` | Doit être `is_customer` (trigger, §3) |
 | `status` | text NOT NULL DEFAULT `'draft'` | CHECK `in ('draft','issued','partially_paid','paid','cancelled')` |
 | `invoice_date` | date NOT NULL | |
@@ -134,15 +169,20 @@ garanti par le trigger d'immutabilité §9), `line_number` smallint,
 `line_subtotal`, `tax_amount`, `line_total` numeric(14,2) NOT NULL,
 `cost_center_id` uuid NULL, timestamps.
 
-### 2.6 `public.credit_notes` et `public.credit_note_lines`
+### 2.6 Avoirs — **aucune table dédiée** (décision n°3)
 
-Structure **miroir** de la facture (voir §16-C pour l'arbitrage
-« table séparée » vs « `document_type` sur la facture ») :
-`credit_note_number`, `third_party_id`, `invoice_id` **nullable**
-(avoir rattaché à une facture précise, ou avoir général), `status`
-(`'draft'`,`'issued'`,`'cancelled'`), montants, `currency` +
-`exchange_rate_to_htg` **hérités de la facture d'origine si rattaché**,
-`journal_entry_id`, `reason` NOT NULL.
+Un avoir est une ligne de `customer_invoices` avec
+`document_type = 'CREDIT_NOTE'`, ses lignes dans
+`customer_invoice_lines`. Spécificités portées par des contraintes
+(§3.1) plutôt que par une structure parallèle :
+
+- `credited_invoice_id` renseigné → devise et `exchange_rate_to_htg`
+  **hérités et figés** depuis la facture créditée (jamais un nouveau
+  taux) ;
+- le total de l'avoir ne peut pas dépasser le solde créditable de la
+  facture rattachée (vérifié en RPC) ;
+- `reason` (motif) **obligatoire** pour un avoir ;
+- numérotation issue d'une **séquence distincte** (`credit_note`).
 
 ### 2.7 `public.customer_payments` et `public.customer_payment_allocations`
 
@@ -228,17 +268,39 @@ p_actor)`
   débit=crédit et validité des comptes restent contrôlés par le moteur
   existant, non réimplémentés**.
 
+> **Décision arbitrée n°8 — confinement strict.** Cette fonction reste
+> dans **`app_private`**, avec `revoke execute … from public` et
+> **aucun `grant` à `authenticated`**. Elle n'est **jamais** exposée en
+> RPC PostgREST : elle n'apparaîtra donc pas comme un endpoint
+> permettant de poster des lignes comptables arbitraires. Seules les RPC
+> métier de §4.2 — elles-mêmes gardées par permission et par les règles
+> de workflow — peuvent l'appeler. Un test dédié vérifie qu'un client
+> `authenticated` **ne peut pas** l'invoquer (§11.3).
+
 ### 4.2 RPC de facturation
 
 | RPC | Rôle | Permission |
 |---|---|---|
-| `create_customer_invoice` | Crée un brouillon (en-tête + lignes en un appel, transactionnel) | `invoice.manage` |
-| `update_customer_invoice_draft` | Remplace en-tête + lignes **en brouillon uniquement** | `invoice.manage` |
-| `issue_customer_invoice` | Attribue le numéro, fige taux et montants, **génère et comptabilise l'écriture**, passe à `issued` | `invoice.manage` |
-| `cancel_customer_invoice` | Annulation **avec justification** — refusée si `amount_paid > 0` ; **contre-passe** l'écriture via `reverse_journal_entry` | `invoice.manage` |
-| `create_credit_note` / `issue_credit_note` | Avoir (brouillon puis émission + écriture) ; impute le solde de la facture rattachée | `invoice.manage` |
-| `record_customer_payment` | Enregistre l'encaissement + allocations, **génère l'écriture et le `cash_movement`**, met à jour `amount_paid` et le statut | `payment.record` |
-| `cancel_customer_payment` | Annulation avec justification : contre-passe l'écriture, annule le mouvement, recalcule le statut de la facture | `payment.record` |
+| `create_customer_document` | Crée un brouillon (facture **ou** avoir : en-tête + lignes en un appel) | `invoice.manage` |
+| `update_customer_document_draft` | Remplace en-tête + lignes **en brouillon uniquement** | `invoice.manage` |
+| `submit_customer_document` | Brouillon → `pending_issue` (le préparateur soumet) | `invoice.manage` |
+| **`issue_customer_document`** | Attribue le numéro, fige taux et montants, **génère et comptabilise l'écriture** → `issued`. **Refuse si l'émetteur est le créateur** (§7) | `invoice.manage` |
+| `cancel_customer_document` | Annulation **avec justification** — refusée si `amount_paid > 0` ; **contre-passe** l'écriture via `reverse_journal_entry` | `invoice.manage` |
+| **`request_invoice_issue_exception`** | Le créateur demande à émettre sa propre facture, **justification obligatoire** | `invoice.manage` |
+| **`validate_invoice_issue_exception`** | **DIRECTEUR_GENERAL ou SUPER_ADMIN** valide (ou refuse) l'exception ; jamais le demandeur lui-même | rôle DG/SUPER_ADMIN |
+| `record_customer_payment` | Encaissement + allocations, **génère l'écriture et le `cash_movement`**, met à jour `amount_paid` et le statut | `payment.record` |
+| `cancel_customer_payment` | Annulation justifiée : contre-passe l'écriture, annule le mouvement, recalcule le statut | `payment.record` |
+
+> **Décision arbitrée n°9 — transactionnalité.** Chaque RPC ci-dessus
+> s'exécute dans **une seule transaction PostgreSQL** : le changement de
+> statut, l'écriture comptable, le `cash_movement` et la mise à jour des
+> montants réussissent **ensemble ou pas du tout**. Aucun `exception`
+> avalé, aucun bloc `begin/exception` qui masquerait un échec partiel de
+> comptabilisation. Il est donc **structurellement impossible** d'avoir
+> un document émis ou payé sans son écriture, ou un encaissement sans
+> mouvement de trésorerie. Deux tests dédiés forcent un échec au milieu
+> (période fermée, compte invalide) et vérifient que **rien** n'a été
+> écrit (§11.2).
 
 ### 4.3 Lecture
 
@@ -306,32 +368,54 @@ Toutes utilisent `(select auth.uid())` pour éviter la régression
 ## §7 — Workflow exact des factures
 
 ```
-                   ┌──────────────► cancelled  (annulation justifiée,
-                   │                             uniquement si amount_paid = 0,
-                   │                             contre-passation de l'écriture)
-   draft ──issue──► issued ──paiement partiel──► partially_paid ──solde──► paid
-     │                 │                                │                    │
-     │                 └────────────── avoir (credit note) ──────────────────┘
-     │                                  (réduit le solde ; jamais de suppression)
-     └── modification libre (en-tête + lignes), aucun numéro, aucune écriture
+                                   ┌────────► cancelled  (justifiée, uniquement si
+                                   │                       amount_paid = 0 → contre-passation)
+   draft ──submit──► pending_issue ──issue──► issued ──part.──► partially_paid ──► paid
+     │                     │          ▲                                │             │
+     │                     │          │ émetteur ≠ créateur            │             │
+     │                     │          │   OU exception validée DG      │             │
+     │                     │          └── request/validate_exception   │             │
+     │                     └── retour en draft possible                │             │
+     │                                                                 │             │
+     └── modif. libre, aucun numéro, aucune écriture    avoir (CREDIT_NOTE) ─────────┘
+                                                        (réduit le solde ; jamais de suppression)
 ```
 
 **Règles de transition :**
 
 1. **`draft`** — modifiable librement. **Aucun numéro attribué**, aucune
    écriture comptable, aucun impact sur les états financiers 2B.
-2. **`issue`** — attribue `invoice_number` (`next_number_internal`),
-   **fige** `exchange_rate_to_htg` et les montants, génère **et
-   comptabilise** l'écriture (§8.1). Refusé si : aucune ligne, total
-   nul, tiers inactif ou non-client, **période comptable fermée**
-   (contrôlé par `post_journal_entry`).
-3. **`partially_paid` / `paid`** — pilotés **exclusivement** par
+2. **`submit`** — le préparateur déclare la facture prête
+   (`pending_issue`). Retour en `draft` possible tant qu'elle n'est pas
+   émise.
+3. **`issue`** — **décision arbitrée n°2, séparation des fonctions** :
+   l'émetteur **ne peut normalement pas être le créateur**
+   (`created_by`). Garde d'acteur explicite, **même mécanisme exact que
+   `approve_manual_journal_entry` en Phase 2A** — pas une permission
+   distincte, une vérification d'acteur.
+   **Exception formelle** disponible, calquée sur le mécanisme déjà
+   éprouvé des dépenses et des écritures manuelles :
+   `request_invoice_issue_exception` (justification obligatoire) puis
+   `validate_invoice_issue_exception` par un **DIRECTEUR_GENERAL ou
+   SUPER_ADMIN** — jamais le demandeur, **toujours tracé en audit**.
+   L'émission attribue `document_number` (`next_number_internal`, séquence
+   selon `document_type`), **fige** `exchange_rate_to_htg` et les
+   montants, génère **et comptabilise** l'écriture (§8.1). Refusée si :
+   aucune ligne, total nul, tiers inactif ou non-client, **période
+   comptable fermée** (contrôlé par `post_journal_entry`).
+4. **`partially_paid` / `paid`** — pilotés **exclusivement** par
    `record_customer_payment` et les avoirs ; `status` et `amount_paid`
    ne sont jamais modifiables à la main.
-4. **`cancelled`** — uniquement si `amount_paid = 0`, avec
+5. **`cancelled`** — uniquement si `amount_paid = 0`, avec
    **justification obligatoire**, et **contre-passation** de l'écriture
    d'émission via `reverse_journal_entry`. Une facture déjà encaissée
    **ne peut pas** être annulée → **avoir obligatoire**.
+
+**Table d'exception** : `customer_invoice_issue_exceptions`
+(`document_id`, `requested_by`, `justification` NOT NULL,
+`status` `pending`/`approved`/`rejected`, `validated_by`,
+`validated_at`, `decision_reason`) — **miroir exact** de
+`journal_entry_approvals` (2A) et `expense_approvals` (1C).
 
 ---
 
@@ -345,7 +429,7 @@ ligne de compte collectif → **comptabilité auxiliaire** exploitable.
 
 | Sens | Compte | Montant | Auxiliaire |
 |---|---|---|---|
-| **Débit** | `third_parties.receivable_account_id` ou **1100 Créances clients** | `total` | `customer` / `third_party_id` |
+| **Débit** | `third_parties.receivable_account_id`, **à défaut** le compte client par défaut de l'organisation | `total` | `customer` / `third_party_id` |
 | **Crédit** | `customer_invoice_lines.revenue_account_id` (une ligne par compte de produit) | `line_subtotal` | — |
 | **Crédit** | `tax_rates.tax_account_id` (si taxe) | `tax_amount` agrégé par taux | — |
 
@@ -385,7 +469,7 @@ associé, recalcul de `amount_paid` et du statut de la facture.
 
 | Règle | Mécanisme |
 |---|---|
-| Une facture **émise** n'est jamais modifiable silencieusement | Trigger `customer_invoices_immutable_once_issued` (patron exact de `journal_entries_immutable_once_posted`) : hors `draft`, seules `amount_paid`, `status` et les champs d'annulation sont modifiables — toute autre modification lève une exception, **y compris via `service_role`** |
+| Une facture **émise** n'est jamais modifiable silencieusement | **Décision arbitrée n°10.** Trigger `customer_invoices_immutable_once_issued` (patron exact de `journal_entries_immutable_once_posted`) : hors `draft`/`pending_issue`, seules `amount_paid`, `status` et les champs d'annulation sont modifiables — toute autre modification lève une exception. **Défense au niveau base**, donc opposable à **tous les chemins privilégiés applicatifs** : Server Action, Route Handler, script d'administration, et **`service_role` inclus**. Aucun code applicatif ne peut la contourner, car la garde n'est pas dans le code applicatif |
 | Les **lignes** d'une facture émise sont figées | Trigger `customer_invoice_lines_immutable_once_issued` (patron `journal_entry_lines_immutable_once_posted`) : INSERT/UPDATE/DELETE refusés si la facture parente n'est plus en `draft` |
 | **Aucune suppression destructive** | Aucune policy DELETE sur les documents ; correction par **avoir**, annulation par **contre-passation justifiée** |
 | Un **tiers utilisé** n'est jamais supprimable | Trigger `third_parties_immutable_if_used` (patron exact de `chart_of_accounts_immutable_if_used`, **avec `set search_path = ''` dès l'écriture** — leçon du correctif `20260824090001`) : bloque le DELETE si le tiers est référencé par une facture, un avoir, un paiement ou une `expense_requests`. Désactivation (`is_active = false`) uniquement |
@@ -478,15 +562,17 @@ le cycle.
 
 | # | Fichier | Contenu |
 |---|---|---|
-| **2C.1** | `..._third_parties.sql` | `third_parties`, `third_party_contacts`, contraintes, index, RLS, audit, trigger d'immutabilité si utilisé, numérotation `third_party` (+ backfill) |
+| **2C.1** | `..._third_parties.sql` | `third_parties`, `third_party_contacts`, `third_party_addresses`, contraintes, index, RLS, audit, trigger d'immutabilité si utilisé, numérotation `third_party` (+ backfill) |
 | **2C.2** | `..._expense_requests_supplier_link.sql` | **Uniquement** `expense_requests.supplier_id` nullable + index partiel + trigger de cohérence (`is_supplier`) |
 | **2C.3** | `..._tax_rates.sql` | `tax_rates` (aucun taux seedé), RLS, audit |
-| **2C.4** | `..._customer_invoices.sql` | `customer_invoices`, `customer_invoice_lines`, contraintes, index, RLS, audit, triggers d'immutabilité, numérotation `customer_invoice` |
-| **2C.5** | `..._multi_line_posting_helper.sql` | `app_private.create_and_post_multi_line_entry` (`create_and_post_two_line_entry` **inchangée**) |
-| **2C.6** | `..._invoice_workflow_rpcs.sql` | `create/update/issue/cancel_customer_invoice` |
-| **2C.7** | `..._credit_notes.sql` | `credit_notes`, `credit_note_lines`, RPC, numérotation `credit_note` |
-| **2C.8** | `..._customer_payments.sql` | `customer_payments`, `customer_payment_allocations`, RPC, intégration `cash_movements`, numérotation `customer_payment` |
-| **2C.9** | `..._customer_statement_report.sql` | `generate_customer_statement_report` (relevé / balance âgée) |
+| **2C.4** | `..._customer_documents.sql` | `customer_invoices` (**modèle unifié `document_type`**), `customer_invoice_lines`, `customer_invoice_issue_exceptions`, contraintes, index, RLS, audit, triggers d'immutabilité, numérotations `customer_invoice` **et** `credit_note` |
+| **2C.5** | `..._multi_line_posting_helper.sql` | `app_private.create_and_post_multi_line_entry` (**confinée**, `create_and_post_two_line_entry` **inchangée**) |
+| **2C.6** | `..._invoice_workflow_rpcs.sql` | `create/update/submit/issue/cancel_customer_document` + RPC d'**exception SoD** |
+| **2C.7** | `..._customer_payments.sql` | `customer_payments`, `customer_payment_allocations`, RPC, intégration `cash_movements`, numérotation `customer_payment` |
+| **2C.8** | `..._customer_statement_report.sql` | `generate_customer_statement_report` (relevé / balance âgée) |
+
+*(8 migrations et non 9 : les avoirs n'ont plus de migration dédiée,
+conséquence de la décision n°3.)*
 
 Chaque migration est **additive** et applicable indépendamment ; aucune
 ne modifie une fonction ou une contrainte de 1C/2A/2B, à la seule
@@ -526,11 +612,23 @@ exception de `seed_default_numbering_sequences()` (redéfinie en
 3. **Aucune fiscalité haïtienne n'est présumée.** `tax_rates` est livrée
    **vide** ; le format du NIF n'est **pas** contraint (pas de regex),
    faute de spécification validée.
-4. Le **compte client par défaut est 1100** (déjà seedé), surchargeable
-   par tiers.
+4. **Décision arbitrée n°7 — aucun numéro de compte codé en dur dans
+   les RPC.** Le compte **1100** ne sert que de **valeur de départ
+   configurée** (résolue par `code` **au moment de la migration**, puis
+   stockée comme référence). La résolution à l'exécution suit la
+   cascade : `third_parties.receivable_account_id` → paramètre de
+   l'organisation → erreur explicite `receivable_account_not_configured`.
+   **Jamais** un `where code = '1100'` dans une RPC. Idem pour les
+   comptes de produits (choisis **par ligne**) et de taxe (portés par
+   `tax_rates.tax_account_id`).
 5. Une facture porte **une seule devise** ; toutes ses lignes sont dans
    cette devise.
-6. Le **paiement est dans la devise de la facture** (voir §16-E).
+6. **Décision arbitrée n°5** — le paiement est **obligatoirement dans la
+   devise de la facture** : HTG→HTG, USD→USD. Toute autre combinaison
+   est **refusée** par la RPC (`currency_mismatch`). Les montants
+   fonctionnels **HTG historiques** et les **taux utilisés** sont
+   conservés sur le document, l'écriture et le mouvement de trésorerie.
+   Aucun écart de change réalisé n'est donc générable en 2C.
 7. Les tiers sont **strictement cloisonnés par organisation** — pas de
    référentiel partagé inter-organisations.
 8. Le numéro de facture est attribué **à l'émission**, pas au brouillon
@@ -542,54 +640,31 @@ exception de `seed_default_numbering_sequences()` (redéfinie en
 
 ---
 
-## §16 — Décisions nécessitant votre arbitrage
+## §16 — Décisions arbitrées (arrêtées le 19/08/2026)
 
-**A. Périmètre fournisseur — recommandation forte**
-Le passif fournisseur transite déjà par `expense_requests` → `expenses`
-→ écriture (Phase 1C). **Recommandation : Phase 2C se limite, côté
-fournisseur, à la fiche tiers + `expense_requests.supplier_id`**, sans
-documents de facture fournisseur ni règlements fournisseurs distincts —
-sinon **double comptage des charges** quasi certain. ▶ *Confirmez-vous
-cette limitation ?*
+Les 10 arbitrages ci-dessous sont **fermés** et intégrés au plan.
 
-**B. Séparation des fonctions sur la facture**
-Trois niveaux possibles : (1) `invoice.manage` suffit pour créer **et**
-émettre — *recommandé*, la SoD réelle étant déjà entre facturation et
-encaissement ; (2) créateur ≠ émetteur imposé (façon écritures manuelles
-2A) ; (3) workflow d'approbation complet avec table dédiée.
-▶ *Quel niveau retenez-vous ?*
+| # | Décision | Intégrée en |
+|---|---|---|
+| **1** | **Aucun workflow autonome de factures fournisseurs en 2C.** Les fournisseurs sont des tiers ; `expense_requests.supplier_id` ajouté **nullable** ; `payee_name`/`payee_reference` **conservés comme snapshots historiques** | §2.8, §14 |
+| **2** | **SoD sur l'émission** : le créateur prépare/soumet mais **ne peut normalement pas émettre sa propre facture**. Exception **DG/SUPER_ADMIN justifiée et auditée**, sur le modèle des exceptions existantes | §4.2, §7 |
+| **3** | **Avoirs = même modèle documentaire** : `document_type = INVOICE \| CREDIT_NOTE` + `credited_invoice_id`, **numérotation séparée** — pas de workflow comptable parallèle | §2.4, §2.6 |
+| **4** | **Référentiel unique `third_parties`** avec rôles CUSTOMER/SUPPLIER ; un tiers peut être les deux ; **identité canonique unique** pour `journal_entry_lines.third_party_id` | §2.1 |
+| **5** | **Paiement en devise différente : interdit.** HTG→HTG, USD→USD. Montants fonctionnels HTG historiques et taux utilisés conservés | §15.6 |
+| **6** | **Contacts et adresses en tables enfants simples** — pas de CRM | §2.2 |
+| **7** | **Comptes produits/taxes configurables** ; 4000 peut être un défaut initial mais **jamais codé en dur dans les RPC** | §15.4, §8.1 |
+| **8** | **Helper multi-lignes confiné à `app_private`**, non exposé à `authenticated` ; aucun endpoint de posting arbitraire | §4.1 |
+| **9** | **Transactionnalité stricte** : jamais un document émis/payé sans son écriture ou son mouvement de trésorerie | §4.2 |
+| **10** | **Immutabilité après émission opposable aux chemins privilégiés applicatifs** ; correction par avoir/reversal uniquement | §9 |
 
-**C. Avoirs : tables séparées ou `document_type` ?**
-(1) `credit_notes` + `credit_note_lines` **séparées** — *recommandé* :
-règles d'immutabilité et numérotation distinctes, pas de convention de
-signe piégeuse (rappel : le bug 2B venait d'une portée de calcul) ;
-(2) une seule table avec `document_type in ('invoice','credit_note')` —
-moins de code, mais invariants mêlés. ▶ *Votre choix ?*
+### Seul point d'implémentation encore signalé
 
-**D. Clé étrangère sur `journal_entry_lines.third_party_id`**
-La colonne est **polymorphe** (`customer`/`supplier` → `third_parties`,
-`employee` → `employees`) : une FK unique est **impossible**.
-Options : (1) **aucune FK physique + trigger de validation** —
-*recommandé*, n'introduit aucun risque sur des lignes déjà
-comptabilisées et immuables ; (2) FK partielle via table de liaison ;
-(3) statu quo sans aucune validation. ▶ *Votre choix ?*
-
-**E. Encaissement dans une devise différente de la facture**
-Génère un **écart de change réalisé** nécessitant un compte dédié et des
-règles validées. **Recommandation : interdire en 2C** (paiement dans la
-devise de la facture) et traiter les écarts de change dans une phase
-ultérieure. ▶ *Acceptez-vous cette restriction ?*
-
-**F. Contacts et adresses**
-Recommandation : **adresse principale en ligne** sur `third_parties` +
-table `third_party_contacts` pour les contacts multiples. Alternative :
-table `third_party_addresses` distincte (adresses de facturation et de
-livraison multiples). ▶ *La version recommandée suffit-elle ?*
-
-**G. Comptes de produits par défaut**
-Faut-il un **compte de produit par défaut** configurable par tiers ou
-par organisation, ou l'utilisateur choisit-il le compte **sur chaque
-ligne** (recommandé, plus explicite) ? ▶ *Votre préférence ?*
+**Rôles du tiers : drapeaux booléens plutôt que table enfant** — voir la
+note en §2.1. Motif : les policies RLS doivent arbitrer
+`customer.manage` vs `supplier.manage` **au moment de l'INSERT**, ce
+qu'une table enfant (insérée après le parent) ne permet pas de garantir.
+L'exigence « identité canonique unique » est pleinement satisfaite.
+▶ *Signalez-le si vous préférez malgré tout une table enfant.*
 
 ---
 
@@ -644,6 +719,15 @@ sans écriture — donc facilement réversible si un problème apparaît.
 
 ---
 
-**Je m'arrête ici. Aucune migration, aucun code applicatif, aucun commit
-d'implémentation Phase 2C ne sera produit avant votre validation de ce
-plan et vos arbitrages §16.**
+---
+
+## §19 — Journal des jalons
+
+| Jalon | Statut |
+|---|---|
+| **2C.1** — Référentiel tiers + RLS + liaison fournisseur | 🚧 **En cours** |
+| 2C.2 → 2C.6 | ⏸ En attente de validation du jalon précédent |
+
+**Dette Phase 2B enregistrée séparément** : verrou E2E 22/22 en une
+seule passe, à régulariser dans sa propre fenêtre Supabase stable.
+**Aucun élément de Phase 2C ne la modifie ni ne la masque.**
