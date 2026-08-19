@@ -465,20 +465,44 @@ nouvelle vérification sert à détecter une **régression entre deux rejeux
 manuels de l'Advisor** — elle ne permet toujours pas d'affirmer
 « 0 avertissement Advisor ».
 
-### G.1 — Décompte par catégorie
+### G.1 — Décompte par catégorie — CHIFFRES RÉELS DE L'ADVISOR POST-MIGRATION
+
+> **Source : export réel du Security Advisor rejoué par Jean Alix Pierre
+> APRÈS la migration `20260824090001`.** Ce ne sont pas des chiffres
+> estimés par moi. Ils **corrigent** mon estimation antérieure (« 29 »),
+> qui était fausse — voir l'encadré sous le tableau.
 
 | Catégorie | Avertissement | Nb | Disposition |
 |---|---|---:|---|
-| **CORRIGÉ** | `function_search_path_mutable` → `app_private.chart_of_accounts_immutable_if_used` | 1 | ✅ Corrigé par `20260824090001` (`set search_path = ''`, standard de `20260816090014`). Vérifié live : la fonction n'apparaît plus. Balayage des **78 fonctions** : aucune autre concernée |
-| **AUDITÉ ET ACCEPTÉ** | `authenticated_security_definer_function_executable` — 6 RPC Phase 2B | 6 | ⚠️ Attendu. Exposition nécessaire et prouvée sûre (§G.2). **Ni passées en SECURITY INVOKER, ni `authenticated` révoqué** |
-| **AUDITÉ ET ACCEPTÉ** | `authenticated_security_definer_function_executable` — RPC Phase 1C/2A | 23 | ⚠️ Inchangées : aucune migration 2B ne les redéfinit (vérifié). **Non rouvertes** |
-| **LIMITATION PLATEFORME** | `auth_leaked_password_protection` | 1 | 🔒 Fonctionnalité exigeant le plan Pro. **Pas un défaut applicatif**. Position inchangée depuis Phase 1C |
+| **CORRIGÉ** | `function_search_path_mutable` | **0** | ✅ **Fermé officiellement.** Était à 1 (`app_private.chart_of_accounts_immutable_if_used`), corrigé par `20260824090001` (`set search_path = ''`). **Confirmé à 0 par l'Advisor réel** |
+| **AUDITÉ ET ACCEPTÉ** | `authenticated_security_definer_function_executable` — **6 RPC Phase 2B** | **6** | ⚠️ Attendu. **Explicitement auditées dans cette clôture** (§G.2, 7 preuves chacune). Ni passées en `SECURITY INVOKER`, ni `authenticated` révoqué |
+| **INCHANGÉ, ANTÉRIEUR À PHASE 2B** | `authenticated_security_definer_function_executable` — **28 fonctions antérieures** | **28** | ⚠️ **Déjà présentes avant le correctif Phase 2B et strictement identiques entre les deux exports** (comparaison faite par Jean Alix Pierre : aucune apparition, aucune disparition). **Non réauditées individuellement dans cette clôture** — voir mise en garde ci-dessous |
+| **LIMITATION PLATEFORME** | `auth_leaked_password_protection` | **1** | 🔒 Exige le plan Pro. **Pas un défaut applicatif.** Position inchangée depuis Phase 1C |
+| | **TOTAL ACTUEL** | **35** | |
 
-**Je n'affirme donc PAS « Security Advisor = 0 warning ».** Le résultat
-attendu après correctif est : **1 corrigé**, **29 audités et acceptés**
-(6 + 23, `SECURITY DEFINER` intentionnels), **1 limitation de
-plateforme** — soit **30 avertissements qui subsistent légitimement**.
-Ce décompte doit être confirmé par votre prochain rejeu de l'Advisor.
+**Je n'affirme PAS « Security Advisor = 0 warning ».** L'Advisor rapporte
+**35 avertissements**, dont **34 `SECURITY DEFINER` intentionnels** et
+**1 limitation de plateforme**. Le seul volet réellement fermé par cette
+phase est `function_search_path_mutable`, passé de 1 à **0**.
+
+> **Correction d'une erreur de ma part.** J'avais annoncé « 29 »
+> (6 + 23). Faux. L'origine de l'erreur : j'ai repris tel quel le
+> chiffre **23** du rapport Phase 1C, **sans compter les 5 RPC que
+> Phase 2A avait elle-même ajoutées** (`create_manual_journal_entry`,
+> `submit_manual_journal_entry`, `approve_manual_journal_entry`,
+> `request_manual_entry_approval_exception`,
+> `validate_manual_entry_approval_exception`). Le calcul exact est donc
+> **23 (auditées en 1C) + 5 (ajoutées en 2A) = 28 antérieures**, plus
+> **6 (Phase 2B) = 34**, ce qui concorde exactement avec l'export réel.
+> C'est l'Advisor qui fait foi, pas mon estimation.
+
+> ⚠️ **Portée de l'audit — à ne pas surinterpréter.** Seules les **6 RPC
+> Phase 2B** ont été auditées explicitement dans cette clôture (§G.2).
+> Les **28 antérieures** ne sont **pas** présentées comme « réauditées
+> aujourd'hui » : elles sont inchangées par rapport à l'Advisor
+> précédent, déjà présentes avant le correctif Phase 2B, et leurs
+> garanties reposent sur les audits des phases 1C et 2A. Aucune
+> migration Phase 2B ne les redéfinit (vérifié).
 
 ### G.2 — Audit des 6 RPC Phase 2B (preuves exigées)
 
@@ -512,9 +536,26 @@ passe** (17/22, puis 21/22, puis 15/22), aucun échec métier reproductible,
 toutes les routes répondent avec les codes attendus, et les **5/5 tests
 Phase 2B sont verts** dans la meilleure passe.
 
-## I. Conclusion
+## I. Conclusion — un seul verrou restant
 
-Phase 2B **n'est pas déclarée définitivement clôturée**. Restent :
-(a) confirmation du décompte §G.1 par votre prochain rejeu de l'Advisor ;
-(b) le 22/22 E2E en session reposée ; (c) votre validation explicite.
+**Volets validés par Jean Alix Pierre :**
+
+| Volet | Statut |
+|---|---|
+| Périmètre fonctionnel, RPC, états, règles de calcul, réconciliation | ✅ Validé |
+| Passe intégration continue **210/210** (18/08) | ✅ Validée |
+| Correction déterministe `permission-overrides.test.ts` | ✅ Approuvée |
+| `function_search_path_mutable` | ✅ **Fermé** (0 à l'Advisor réel) |
+| Détection générique `debug_functions_with_mutable_search_path` | ✅ Approuvée |
+| 6 warnings `SECURITY DEFINER` Phase 2B | ✅ Acceptés comme exposition intentionnelle auditée |
+| Passe 138/214 (76 rate limit, 0 échec métier) | ✅ Non considérée comme régression |
+| **Volet Security Advisor Phase 2B** | ✅ **Validé** |
+
+**Verrou restant, unique :** obtenir une passe **E2E complète 22/22 en
+une seule exécution**, dans une fenêtre Supabase réellement stable
+(serveur dev redémarré proprement, aucun autre runner actif, latence
+Auth normale et stable, aucune suite d'intégration lancée juste avant).
+Sans modification du code métier ni gonflement des timeouts Playwright.
+
+Phase 2B **n'est donc pas encore déclarée définitivement clôturée**.
 **Aucune ligne de Phase 2C n'a été commencée.**
