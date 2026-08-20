@@ -1,7 +1,13 @@
 # Phase 2B — États financiers — Rapport de clôture complet
 
-Statut : **EN ATTENTE DE VOTRE VALIDATION EXPLICITE** avant tout début
-de Phase 2C. Aucune ligne de Phase 2C n'a été commencée.
+Statut : **✅ CLOSED — validé par Jean Alix Pierre le 20/08/2026.**
+
+> Historique conservé sans réécriture. Ce document a d'abord été rédigé
+> alors que Phase 2B restait **ouverte** sur un unique verrou : la passe
+> E2E complète, qui **n'avait pas été obtenue à l'époque**. Ce verrou a
+> été levé ultérieurement (§H.2), pendant le jalon 2C.4, par une passe
+> **30/30 en une seule exécution continue**. Les constats d'époque sont
+> laissés tels quels ; seuls les §H et §I portent la clôture.
 
 ---
 
@@ -525,18 +531,56 @@ valide en plus que `p_fiscal_year_id` appartient bien à `p_org_id`.
 Phase 2B n'ajoute **aucune table, aucune policy RLS, aucun index**
 (vérifié par `grep` des deux migrations). Aucun changement attendu.
 
-## H. E2E — option 1 retenue
+## H. E2E — dette ouverte à l'époque, CLÔTURÉE le 20/08/2026
 
-Recherche d'un **22/22 en une seule passe propre** reportée à une
-session réellement reposée (serveur dev redémarré, aucun autre runner,
-latence Auth normale et stable, aucune suite d'intégration lancée juste
-avant). **Aucun code métier modifié, aucun timeout Playwright gonflé.**
-Constat à ce jour : l'ensemble des tests en échec **change à chaque
-passe** (17/22, puis 21/22, puis 15/22), aucun échec métier reproductible,
-toutes les routes répondent avec les codes attendus, et les **5/5 tests
-Phase 2B sont verts** dans la meilleure passe.
+### H.1 — Ce qui s'est réellement passé à l'époque (historique non réécrit)
 
-## I. Conclusion — un seul verrou restant
+**Le 22/22 en une seule passe n'a PAS été obtenu pendant la fenêtre
+Phase 2B.** L'option 1 (attendre des conditions Supabase réellement
+stables) avait été retenue, et le verrou est resté **ouvert** à la
+clôture fonctionnelle de 2B.
+
+Constat de l'époque, conservé tel quel : l'ensemble des tests en échec
+**changeait à chaque passe** — 17/22, puis 21/22, puis 15/22 — aucun
+échec métier reproductible, toutes les routes répondant avec les codes
+attendus, et les **5/5 tests Phase 2B verts** dans la meilleure passe.
+Diagnostic retenu alors : instabilité d'infrastructure, **aucun code
+métier modifié, aucun timeout Playwright gonflé**.
+
+### H.2 — Preuve de clôture obtenue ultérieurement (20/08/2026)
+
+Lors du jalon **2C.4**, une exécution E2E complète a été lancée dans des
+conditions stables (serveur dev redémarré proprement, latence mesurée
+~0,2 s, aucun autre runner actif) :
+
+| | |
+|---|---|
+| Commande | `npx playwright test --project=desktop-chromium --project=mobile-chromium` |
+| Portée | **tous** les fichiers de `tests/e2e/`, **une seule exécution** |
+| Résultat | **30/30 — 0 échec** |
+| Durée | 8,4 min |
+| Rejeux inclus dans ce total | **aucun** |
+
+**Les suites historiquement instables sont incluses et vertes** :
+`treasury-workflow` (l'échec unique de la meilleure passe 2B),
+`mobile-nav`, `budget-workflow`, `expense-workflow`,
+`errors-empty-states`, `papej-pdf-export`, `papej-workflow`,
+`financial-statements` (les 5 tests Phase 2B).
+
+La suite compte désormais **30 tests** (contre 22 à l'époque de 2B) :
+le critère historique de **22/22 en une passe propre** est donc
+**satisfait et dépassé**. Aucun code métier n'a été modifié pour
+l'obtenir, aucun timeout n'a été gonflé — la différence tient
+exclusivement aux conditions d'exécution.
+
+**Validé par Jean Alix Pierre le 20/08/2026 : aucune dette E2E Phase 2B
+ne reste ouverte.**
+
+## I. Conclusion — PHASE 2B CLOSED
+
+> **Statut : ✅ CLOSED (20/08/2026).** Tous les volets sont validés et
+> le dernier verrou — la passe E2E — est levé (§H.2). Aucune dette
+> Phase 2B ne reste ouverte.
 
 **Volets validés par Jean Alix Pierre :**
 
@@ -551,11 +595,13 @@ Phase 2B sont verts** dans la meilleure passe.
 | Passe 138/214 (76 rate limit, 0 échec métier) | ✅ Non considérée comme régression |
 | **Volet Security Advisor Phase 2B** | ✅ **Validé** |
 
-**Verrou restant, unique :** obtenir une passe **E2E complète 22/22 en
-une seule exécution**, dans une fenêtre Supabase réellement stable
-(serveur dev redémarré proprement, aucun autre runner actif, latence
-Auth normale et stable, aucune suite d'intégration lancée juste avant).
-Sans modification du code métier ni gonflement des timeouts Playwright.
+| **Passe E2E complète** | ✅ **Levée le 20/08/2026** — 30/30 en une seule exécution (§H.2) |
 
-Phase 2B **n'est donc pas encore déclarée définitivement clôturée**.
-**Aucune ligne de Phase 2C n'a été commencée.**
+**Aucun verrou restant.** Le dernier — la passe E2E — était encore
+ouvert à la clôture fonctionnelle de 2B ; il a été levé ultérieurement,
+pendant le jalon 2C.4, par une passe complète **30/30 en une seule
+exécution continue** incluant les suites historiquement instables.
+
+**Phase 2B est CLOSED.** L'historique ci-dessus n'a pas été réécrit :
+le 22/22 n'avait pas été obtenu à l'époque, et le document le dit
+explicitement (§H.1).
