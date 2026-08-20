@@ -157,6 +157,108 @@ export async function createGrant(label: string) {
   return { grantId: grant!.id as string, grantName: grant!.name as string, registry, admin, cleanup: () => registry.cleanup(admin) }
 }
 
+/** Fiche tiers CLIENT, sans document — pour les ecrans de referentiel. */
+export async function createCustomerThirdParty(label: string) {
+  const admin = adminClient()
+  const registry = new FixtureRegistry()
+  const orgId = await getOrgAId()
+
+  const { data, error } = await admin
+    .from('third_parties')
+    .insert({ organization_id: orgId, legal_name: tag(`Client ${label}`), is_customer: true })
+    .select('id, third_party_code, legal_name')
+    .single()
+  if (error) throw error
+  registry.track('third_parties', data!.id as string)
+
+  return {
+    id: data!.id as string,
+    code: data!.third_party_code as string,
+    legalName: data!.legal_name as string,
+    orgId,
+    registry,
+    admin,
+    cleanup: () => registry.cleanup(admin),
+  }
+}
+
+/**
+ * Facture client EMISE (donc comptabilisee par 2C.3A), pour les ecrans de
+ * consultation, le PDF et les controles d'acces.
+ *
+ * Le createur du brouillon est DIFFERENT de l'emetteur : la separation
+ * des fonctions livree en 2C.3A refuserait sinon l'emission — ce n'est
+ * pas ce que ces tests d'ecran cherchent a verifier.
+ */
+export async function createIssuedInvoice(label: string, total: number) {
+  const admin = adminClient()
+  const orgId = await getOrgAId()
+  const customer = await createCustomerThirdParty(label)
+  const registry = customer.registry
+
+  const preparer = (await admin.from('users').select('id').eq('full_name', 'Demo Manager').single()).data!.id
+  const revenue = (
+    await admin
+      .from('chart_of_accounts')
+      .select('id')
+      .eq('organization_id', orgId)
+      .eq('type', 'revenue')
+      .eq('is_active', true)
+      .limit(1)
+      .single()
+  ).data!.id
+
+  const today = new Date().toISOString().slice(0, 10)
+  const { data: doc, error: docError } = await admin
+    .from('invoices')
+    .insert({
+      organization_id: orgId,
+      third_party_id: customer.id,
+      document_date: today,
+      due_date: '2027-12-31',
+      created_by: preparer,
+    })
+    .select('id')
+    .single()
+  if (docError) throw docError
+  registry.track('invoices', doc!.id as string)
+
+  const { data: line, error: lineError } = await admin
+    .from('invoice_lines')
+    .insert({
+      organization_id: orgId,
+      invoice_id: doc!.id,
+      line_number: 1,
+      description: tag(`Prestation ${label}`),
+      quantity: 1,
+      unit_price: total,
+      revenue_account_id: revenue,
+    })
+    .select('id')
+    .single()
+  if (lineError) throw lineError
+  registry.track('invoice_lines', line!.id as string)
+
+  const client = await comptableClient()
+  const { data: issued, error: issueError } = await client.rpc('issue_invoice_document', {
+    p_document_id: doc!.id,
+  })
+  if (issueError) throw issueError
+  const result = issued as { success: boolean; document_number?: string; error?: string }
+  if (!result?.success) throw new Error(`Emission impossible: ${JSON.stringify(issued)}`)
+
+  return {
+    invoiceId: doc!.id as string,
+    documentNumber: result.document_number as string,
+    customerId: customer.id,
+    customerName: customer.legalName,
+    orgId,
+    registry,
+    admin,
+    cleanup: () => registry.cleanup(admin),
+  }
+}
+
 /**
  * Deux comptes + une ecriture comptable a 2 lignes, COMPTABILISEE (posted),
  * pour exercer les etats financiers Phase 2B (tests/e2e/financial-statements.spec.ts).

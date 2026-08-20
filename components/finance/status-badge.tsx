@@ -52,6 +52,37 @@ const JOURNAL_ENTRY_STATUS_TONE: Record<string, Tone> = {
   posted: 'success',
 }
 
+// Documents de facturation (Phase 2C) — vocabulaire propre : « Emise »
+// n'a pas le meme sens que « Comptabilisee » d'une ecriture, et
+// partially_paid/paid n'existent dans aucun autre domaine.
+const INVOICE_STATUS_LABELS: Record<string, string> = {
+  draft: 'Brouillon',
+  pending_issue: 'A emettre',
+  issued: 'Emise',
+  partially_paid: 'Partiellement payee',
+  paid: 'Payee',
+  cancelled: 'Annulee',
+}
+
+const INVOICE_STATUS_TONE: Record<string, Tone> = {
+  draft: 'neutral',
+  pending_issue: 'warning',
+  issued: 'info',
+  partially_paid: 'warning',
+  paid: 'success',
+  cancelled: 'danger',
+}
+
+const PAYMENT_STATUS_LABELS: Record<string, string> = {
+  recorded: 'Comptabilise',
+  cancelled: 'Annule',
+}
+
+const PAYMENT_STATUS_TONE: Record<string, Tone> = {
+  recorded: 'success',
+  cancelled: 'danger',
+}
+
 type Tone = 'neutral' | 'success' | 'warning' | 'danger' | 'info'
 
 const TONE_CLASSES: Record<Tone, string> = {
@@ -67,11 +98,33 @@ const TONE_CLASSES: Record<Tone, string> = {
  * codes techniques bruts. `domain="expense"` utilise le vocabulaire du
  * workflow depense ; sinon repli sur un mapping generique (actif/ferme/...).
  */
-export function StatusBadge({ status, domain }: { status: string; domain?: 'expense' | 'journal_entry' }) {
+export function StatusBadge({
+  status,
+  domain,
+}: {
+  status: string
+  domain?: 'expense' | 'journal_entry' | 'invoice' | 'payment'
+}) {
   const domainLabels =
-    domain === 'expense' ? EXPENSE_STATUS_LABELS : domain === 'journal_entry' ? JOURNAL_ENTRY_STATUS_LABELS : undefined
+    domain === 'expense'
+      ? EXPENSE_STATUS_LABELS
+      : domain === 'journal_entry'
+        ? JOURNAL_ENTRY_STATUS_LABELS
+        : domain === 'invoice'
+          ? INVOICE_STATUS_LABELS
+          : domain === 'payment'
+            ? PAYMENT_STATUS_LABELS
+            : undefined
   const domainTones =
-    domain === 'expense' ? EXPENSE_STATUS_TONE : domain === 'journal_entry' ? JOURNAL_ENTRY_STATUS_TONE : undefined
+    domain === 'expense'
+      ? EXPENSE_STATUS_TONE
+      : domain === 'journal_entry'
+        ? JOURNAL_ENTRY_STATUS_TONE
+        : domain === 'invoice'
+          ? INVOICE_STATUS_TONE
+          : domain === 'payment'
+            ? PAYMENT_STATUS_TONE
+            : undefined
   const label = domainLabels?.[status] ?? GENERIC_STATUS_LABELS[status] ?? status
   const tone: Tone = domainTones?.[status] ?? 'neutral'
 

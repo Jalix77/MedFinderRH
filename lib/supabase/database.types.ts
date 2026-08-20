@@ -302,6 +302,111 @@ export type Database = {
           },
         ]
       }
+      customer_payments: {
+        Row: {
+          amount: number
+          amount_htg: number | null
+          cancel_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          cash_movement_id: string | null
+          created_at: string
+          created_by: string | null
+          currency: string
+          exchange_rate_to_htg: number
+          id: string
+          invoice_id: string
+          journal_entry_id: string | null
+          notes: string | null
+          organization_id: string
+          payment_date: string
+          payment_number: string
+          status: string
+          third_party_id: string
+          treasury_account_id: string
+          treasury_account_type: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          amount: number
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          cash_movement_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          currency: string
+          exchange_rate_to_htg: number
+          id?: string
+          invoice_id: string
+          journal_entry_id?: string | null
+          notes?: string | null
+          organization_id: string
+          payment_date?: string
+          payment_number: string
+          status?: string
+          third_party_id: string
+          treasury_account_id: string
+          treasury_account_type: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          amount?: number
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          cash_movement_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          exchange_rate_to_htg?: number
+          id?: string
+          invoice_id?: string
+          journal_entry_id?: string | null
+          notes?: string | null
+          organization_id?: string
+          payment_date?: string
+          payment_number?: string
+          status?: string
+          third_party_id?: string
+          treasury_account_id?: string
+          treasury_account_type?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "customer_payments_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_payments_third_party_id_fkey"
+            columns: ["third_party_id"]
+            isOneToOne: false
+            referencedRelation: "third_parties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_payments_journal_entry_id_fkey"
+            columns: ["journal_entry_id"]
+            isOneToOne: true
+            referencedRelation: "journal_entries"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "customer_payments_cash_movement_id_fkey"
+            columns: ["cash_movement_id"]
+            isOneToOne: true
+            referencedRelation: "cash_movements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       invoice_issue_approvals: {
         Row: {
           created_at: string
@@ -433,6 +538,8 @@ export type Database = {
       }
       invoices: {
         Row: {
+          amount_paid: number
+          balance_due: number | null
           cancel_reason: string | null
           cancelled_at: string | null
           cancelled_by: string | null
@@ -463,6 +570,7 @@ export type Database = {
           updated_by: string | null
         }
         Insert: {
+          amount_paid?: number
           cancel_reason?: string | null
           cancelled_at?: string | null
           cancelled_by?: string | null
@@ -492,6 +600,7 @@ export type Database = {
           updated_by?: string | null
         }
         Update: {
+          amount_paid?: number
           cancel_reason?: string | null
           cancelled_at?: string | null
           cancelled_by?: string | null
@@ -3599,6 +3708,21 @@ export type Database = {
       debug_unwanted_function_grants: {
         Args: { p_schema?: string }
         Returns: { function_signature: string; grantee: string }[]
+      }
+      record_customer_payment: {
+        Args: {
+          p_invoice_id: string
+          p_amount: number
+          p_payment_date: string
+          p_treasury_account_type: string
+          p_treasury_account_id: string
+          p_notes?: string
+        }
+        Returns: Json
+      }
+      cancel_customer_payment: {
+        Args: { p_payment_id: string; p_reason: string }
+        Returns: Json
       }
       submit_invoice_document: {
         Args: { p_document_id: string }
