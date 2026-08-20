@@ -1301,6 +1301,7 @@ export type Database = {
           requested_date: string
           requester_id: string
           status: string
+          supplier_id: string | null
           updated_at: string
           updated_by: string | null
         }
@@ -1323,6 +1324,7 @@ export type Database = {
           requested_date?: string
           requester_id: string
           status?: string
+          supplier_id?: string | null
           updated_at?: string
           updated_by?: string | null
         }
@@ -1345,10 +1347,18 @@ export type Database = {
           requested_date?: string
           requester_id?: string
           status?: string
+          supplier_id?: string | null
           updated_at?: string
           updated_by?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "expense_requests_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "third_parties"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "expense_requests_budget_line_id_fkey"
             columns: ["budget_line_id"]
@@ -2923,6 +2933,215 @@ export type Database = {
             columns: ["user_id"]
             isOneToOne: false
             referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      third_parties: {
+        Row: {
+          commercial_name: string | null
+          created_at: string
+          created_by: string | null
+          email: string | null
+          id: string
+          is_active: boolean
+          is_customer: boolean
+          is_supplier: boolean
+          legal_form: string | null
+          legal_name: string
+          notes: string | null
+          organization_id: string
+          payable_account_id: string | null
+          payment_terms_days: number
+          phone: string | null
+          preferred_currency: string
+          receivable_account_id: string | null
+          tax_id: string | null
+          third_party_code: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          commercial_name?: string | null
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          id?: string
+          is_active?: boolean
+          is_customer?: boolean
+          is_supplier?: boolean
+          legal_form?: string | null
+          legal_name: string
+          notes?: string | null
+          organization_id: string
+          payable_account_id?: string | null
+          payment_terms_days?: number
+          phone?: string | null
+          preferred_currency?: string
+          receivable_account_id?: string | null
+          tax_id?: string | null
+          third_party_code?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          commercial_name?: string | null
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          id?: string
+          is_active?: boolean
+          is_customer?: boolean
+          is_supplier?: boolean
+          legal_form?: string | null
+          legal_name?: string
+          notes?: string | null
+          organization_id?: string
+          payable_account_id?: string | null
+          payment_terms_days?: number
+          phone?: string | null
+          preferred_currency?: string
+          receivable_account_id?: string | null
+          tax_id?: string | null
+          third_party_code?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "third_parties_organization_id_fkey"
+            columns: ["organization_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "third_parties_receivable_account_id_fkey"
+            columns: ["receivable_account_id"]
+            isOneToOne: false
+            referencedRelation: "chart_of_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "third_parties_payable_account_id_fkey"
+            columns: ["payable_account_id"]
+            isOneToOne: false
+            referencedRelation: "chart_of_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      third_party_addresses: {
+        Row: {
+          address_line1: string
+          address_line2: string | null
+          address_type: string
+          city: string | null
+          country: string
+          created_at: string
+          created_by: string | null
+          department: string | null
+          id: string
+          is_primary: boolean
+          organization_id: string
+          third_party_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          address_line1: string
+          address_line2?: string | null
+          address_type?: string
+          city?: string | null
+          country?: string
+          created_at?: string
+          created_by?: string | null
+          department?: string | null
+          id?: string
+          is_primary?: boolean
+          organization_id: string
+          third_party_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          address_line1?: string
+          address_line2?: string | null
+          address_type?: string
+          city?: string | null
+          country?: string
+          created_at?: string
+          created_by?: string | null
+          department?: string | null
+          id?: string
+          is_primary?: boolean
+          organization_id?: string
+          third_party_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "third_party_addresses_third_party_id_fkey"
+            columns: ["third_party_id"]
+            isOneToOne: false
+            referencedRelation: "third_parties"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      third_party_contacts: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          email: string | null
+          full_name: string
+          id: string
+          is_primary: boolean
+          notes: string | null
+          organization_id: string
+          phone: string | null
+          role_title: string | null
+          third_party_id: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          full_name: string
+          id?: string
+          is_primary?: boolean
+          notes?: string | null
+          organization_id: string
+          phone?: string | null
+          role_title?: string | null
+          third_party_id: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          email?: string | null
+          full_name?: string
+          id?: string
+          is_primary?: boolean
+          notes?: string | null
+          organization_id?: string
+          phone?: string | null
+          role_title?: string | null
+          third_party_id?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "third_party_contacts_third_party_id_fkey"
+            columns: ["third_party_id"]
+            isOneToOne: false
+            referencedRelation: "third_parties"
             referencedColumns: ["id"]
           },
         ]
