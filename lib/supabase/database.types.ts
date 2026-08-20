@@ -302,6 +302,248 @@ export type Database = {
           },
         ]
       }
+      invoice_issue_approvals: {
+        Row: {
+          created_at: string
+          decision_reason: string | null
+          exception_justification: string
+          exception_requested_by: string
+          exception_result: string | null
+          exception_validated_at: string | null
+          exception_validated_by: string | null
+          id: string
+          invoice_id: string
+          organization_id: string
+          sod_rule_violated: string
+        }
+        Insert: {
+          created_at?: string
+          decision_reason?: string | null
+          exception_justification: string
+          exception_requested_by: string
+          exception_result?: string | null
+          exception_validated_at?: string | null
+          exception_validated_by?: string | null
+          id?: string
+          invoice_id: string
+          organization_id: string
+          sod_rule_violated?: string
+        }
+        Update: {
+          created_at?: string
+          decision_reason?: string | null
+          exception_justification?: string
+          exception_requested_by?: string
+          exception_result?: string | null
+          exception_validated_at?: string | null
+          exception_validated_by?: string | null
+          id?: string
+          invoice_id?: string
+          organization_id?: string
+          sod_rule_violated?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_issue_approvals_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoice_lines: {
+        Row: {
+          cost_center_id: string | null
+          created_at: string
+          created_by: string | null
+          description: string
+          id: string
+          invoice_id: string
+          line_number: number
+          line_subtotal: number | null
+          line_total: number | null
+          organization_id: string
+          quantity: number
+          revenue_account_id: string
+          tax_amount: number | null
+          tax_rate_id: string | null
+          tax_rate_percent: number
+          unit_price: number
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          cost_center_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          description: string
+          id?: string
+          invoice_id: string
+          line_number: number
+          organization_id: string
+          quantity: number
+          revenue_account_id: string
+          tax_rate_id?: string | null
+          tax_rate_percent?: number
+          unit_price: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          cost_center_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string
+          id?: string
+          invoice_id?: string
+          line_number?: number
+          organization_id?: string
+          quantity?: number
+          revenue_account_id?: string
+          tax_rate_id?: string | null
+          tax_rate_percent?: number
+          unit_price?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoice_lines_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_lines_revenue_account_id_fkey"
+            columns: ["revenue_account_id"]
+            isOneToOne: false
+            referencedRelation: "chart_of_accounts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoice_lines_tax_rate_id_fkey"
+            columns: ["tax_rate_id"]
+            isOneToOne: false
+            referencedRelation: "tax_rates"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      invoices: {
+        Row: {
+          cancel_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          cost_center_id: string | null
+          created_at: string
+          created_by: string | null
+          credit_reason: string | null
+          credited_invoice_id: string | null
+          currency: string
+          document_date: string
+          document_number: string | null
+          document_type: string
+          due_date: string
+          exchange_rate_to_htg: number
+          external_reference: string | null
+          id: string
+          issued_at: string | null
+          issued_by: string | null
+          notes: string | null
+          organization_id: string
+          status: string
+          subtotal: number
+          tax_total: number
+          third_party_id: string
+          total: number
+          total_htg: number | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          cost_center_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          credit_reason?: string | null
+          credited_invoice_id?: string | null
+          currency?: string
+          document_date?: string
+          document_number?: string | null
+          document_type?: string
+          due_date: string
+          exchange_rate_to_htg?: number
+          external_reference?: string | null
+          id?: string
+          issued_at?: string | null
+          issued_by?: string | null
+          notes?: string | null
+          organization_id: string
+          status?: string
+          subtotal?: number
+          tax_total?: number
+          third_party_id: string
+          total?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          cost_center_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          credit_reason?: string | null
+          credited_invoice_id?: string | null
+          currency?: string
+          document_date?: string
+          document_number?: string | null
+          document_type?: string
+          due_date?: string
+          exchange_rate_to_htg?: number
+          external_reference?: string | null
+          id?: string
+          issued_at?: string | null
+          issued_by?: string | null
+          notes?: string | null
+          organization_id?: string
+          status?: string
+          subtotal?: number
+          tax_total?: number
+          third_party_id?: string
+          total?: number
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_third_party_id_fkey"
+            columns: ["third_party_id"]
+            isOneToOne: false
+            referencedRelation: "third_parties"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_credited_invoice_id_fkey"
+            columns: ["credited_invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "invoices_cost_center_id_fkey"
+            columns: ["cost_center_id"]
+            isOneToOne: false
+            referencedRelation: "cost_centers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       journal_entries: {
         Row: {
           created_at: string
@@ -2937,6 +3179,56 @@ export type Database = {
           },
         ]
       }
+      tax_rates: {
+        Row: {
+          code: string
+          created_at: string
+          created_by: string | null
+          id: string
+          is_active: boolean
+          label: string
+          organization_id: string
+          rate_percent: number
+          tax_account_id: string | null
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          label: string
+          organization_id: string
+          rate_percent: number
+          tax_account_id?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          is_active?: boolean
+          label?: string
+          organization_id?: string
+          rate_percent?: number
+          tax_account_id?: string | null
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tax_rates_tax_account_id_fkey"
+            columns: ["tax_account_id"]
+            isOneToOne: false
+            referencedRelation: "chart_of_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       third_parties: {
         Row: {
           commercial_name: string | null
@@ -3307,6 +3599,26 @@ export type Database = {
       debug_unwanted_function_grants: {
         Args: { p_schema?: string }
         Returns: { function_signature: string; grantee: string }[]
+      }
+      submit_invoice_document: {
+        Args: { p_document_id: string }
+        Returns: Json
+      }
+      issue_invoice_document: {
+        Args: { p_document_id: string }
+        Returns: Json
+      }
+      cancel_invoice_document: {
+        Args: { p_document_id: string; p_reason: string }
+        Returns: Json
+      }
+      request_invoice_issue_exception: {
+        Args: { p_document_id: string; p_justification: string }
+        Returns: Json
+      }
+      validate_invoice_issue_exception: {
+        Args: { p_exception_id: string; p_decision: string; p_reason?: string }
+        Returns: Json
       }
       generate_balance_sheet_report: {
         Args: { p_as_of_date: string; p_fiscal_year_id: string; p_org_id: string }
