@@ -23,7 +23,11 @@ test.describe('Phase 2C.4 — Ecrans facturation et tiers', () => {
       await expect(link).toBeVisible()
 
       await link.click()
-      await expect(page).toHaveURL(new RegExp(`/tiers/${fixture.id}$`))
+      // waitForURL plutot que toHaveURL : la navigation serveur vers la
+      // fiche (plusieurs requetes) depasse regulierement le timeout
+      // d'assertion par defaut de 5 s. Meme correction que sur le lien
+      // « Modifier » plus bas dans ce fichier.
+      await page.waitForURL(new RegExp(`/tiers/${fixture.id}$`), { timeout: 30000 })
       await expect(page.getByRole('heading', { name: fixture.legalName })).toBeVisible()
       await expect(page.getByText(fixture.code)).toBeVisible()
     } finally {
