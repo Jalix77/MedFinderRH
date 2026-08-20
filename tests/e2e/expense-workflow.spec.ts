@@ -25,7 +25,7 @@ test.describe('Workflow depense', () => {
       await page.getByRole('button', { name: 'Creer la demande (brouillon)' }).click()
 
       // Redirige vers la fiche (createExpenseRequestAction fait un redirect()).
-      await page.waitForURL(/\/depenses\/[0-9a-f-]{36}$/, { timeout: 15000 })
+      await page.waitForURL(/\/depenses\/[0-9a-f-]{36}$/, { timeout: 30000 })
       registry.track('expense_requests', page.url().split('/').pop()!)
       await expect(page.getByText('Brouillon')).toBeVisible()
 
@@ -52,6 +52,12 @@ test.describe('Workflow depense', () => {
     await page.getByRole('button', { name: 'Creer la demande (brouillon)' }).click()
     // Validation HTML5 native (required) bloque la navigation — toujours
     // sur la page de creation, pas de redirection vers une fiche.
+    //
+    // Le timeout par defaut (5 s) est CORRECT ici et n'a pas ete relevé
+    // avec les trois attentes de navigation du 20/08 : cette assertion
+    // verifie qu'on est RESTE sur place, elle reussit donc
+    // immediatement. L'allonger ne changerait aucun verdict — cela
+    // rendrait seulement plus lent un echec legitime.
     await expect(page).toHaveURL(/\/depenses\/nouvelle$/)
   })
 
@@ -67,7 +73,7 @@ test.describe('Workflow depense', () => {
       const lineValue = await lineSelect.locator('option', { hasText: category }).getAttribute('value')
       await lineSelect.selectOption(lineValue!)
       await page.getByRole('button', { name: 'Creer la demande (brouillon)' }).click()
-      await page.waitForURL(/\/depenses\/[0-9a-f-]{36}$/, { timeout: 15000 })
+      await page.waitForURL(/\/depenses\/[0-9a-f-]{36}$/, { timeout: 30000 })
       registry.track('expense_requests', page.url().split('/').pop()!)
 
       const submitButton = page.getByRole('button', { name: 'Soumettre' })

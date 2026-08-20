@@ -23,7 +23,11 @@ test.describe('Navigation mobile', () => {
     await expect(page.getByRole('link', { name: 'PAPEJ' })).toBeVisible()
 
     await page.getByRole('link', { name: 'Budget' }).click()
-    await expect(page).toHaveURL(/\/budget$/)
+    // Attente de NAVIGATION serveur : le defaut de 5 s de toHaveURL ne
+    // reflete plus le cout reel d'un rendu de page sur le projet cloud
+    // partage (durees observees : 15-35 s). Aucun timeout d'assertion
+    // metier n'est modifie.
+    await page.waitForURL(/\/budget$/, { timeout: 30000 })
     // Le tiroir se referme automatiquement apres navigation (onClick du Link).
     await expect(page.getByRole('link', { name: 'Tresorerie' })).toHaveCount(0)
   })
