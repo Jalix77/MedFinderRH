@@ -262,41 +262,60 @@ describe('Phase 2C.1 — Referentiel de tiers', () => {
       const admin = adminClient()
       const tp = await createThirdParty(orgA, `used${Date.now()}`, { is_customer: true })
 
-      // Rattache le tiers a une ligne d'ecriture existante (colonne
-      // polymorphe deja presente depuis 1C.1) pour simuler un usage
-      // comptable, sans creer d'ecriture nouvelle.
-      const { data: line } = await admin
+      // Le tiers est rattache a une ligne d'une ecriture creee ICI, en
+      // BROUILLON. Piocher une ligne existante au hasard etait fragile :
+      // depuis les jalons 2C.3A/2C.3B, la plupart des lignes appartiennent
+      // a des ecritures COMPTABILISEES, donc immuables et non modifiables
+      // — le test echouait alors pour une raison sans rapport avec ce
+      // qu'il verifie.
+      const { data: journal } = await admin
+        .from('journals').select('id').eq('organization_id', orgA).eq('code', 'MISC').single()
+      const { data: anyEntry } = await admin
+        .from('journal_entries').select('period_id').eq('organization_id', orgA).limit(1).single()
+      const { data: account } = await admin
+        .from('chart_of_accounts').select('id')
+        .eq('organization_id', orgA).eq('is_active', true).limit(1).single()
+
+      const { data: entry, error: entryError } = await admin
+        .from('journal_entries')
+        .insert({
+          organization_id: orgA,
+          journal_id: journal!.id,
+          period_id: anyEntry!.period_id,
+          entry_number: `TP-IMMU-${Date.now()}`,
+          entry_date: new Date().toISOString().slice(0, 10),
+          source_type: 'expense',
+          status: 'draft', // brouillon : ses lignes restent modifiables
+          description: tag('Ecriture de test immutabilite tiers'),
+        })
+        .select('id').single()
+      if (entryError) throw entryError
+      registry.track('journal_entries', entry!.id as string)
+
+      const { data: line, error: lineError } = await admin
         .from('journal_entry_lines')
-        .select('id, entry_id')
-        .limit(1)
-        .maybeSingle()
-
-      if (!line) {
-        // Aucune ligne disponible dans l'environnement : le test ne peut
-        // pas prouver l'immutabilite — echec explicite plutot qu'un faux vert.
-        throw new Error('Aucune journal_entry_lines disponible pour exercer ce scenario')
-      }
-
-      const { error: updateError } = await admin
-        .from('journal_entry_lines')
-        .update({ third_party_type: 'customer', third_party_id: tp.id })
-        .eq('id', line.id)
-
-      if (updateError) {
-        // La ligne appartient a une ecriture deja comptabilisee (immuable
-        // depuis 1C.1) : on ne peut pas la rattacher. Scenario non
-        // exercable sur cette ligne — signale explicitement.
-        throw new Error(`Impossible de rattacher le tiers a une ligne pour le test: ${updateError.message}`)
-      }
+        .insert({
+          organization_id: orgA,
+          entry_id: entry!.id,
+          account_id: account!.id,
+          debit: 10,
+          credit: 0,
+          third_party_type: 'customer',
+          third_party_id: tp.id,
+        })
+        .select('id').single()
+      if (lineError) throw lineError
+      registry.track('journal_entry_lines', line!.id as string)
 
       const { error: deleteError } = await admin.from('third_parties').delete().eq('id', tp.id)
       expect(deleteError, 'la suppression doit etre refusee par le trigger d\'immutabilite').toBeTruthy()
 
-      // Nettoyage : detache le tiers pour que le registre puisse supprimer la fiche.
+      // Detache le tiers pour que le registre puisse supprimer la fiche
+      // (l'ecriture est en brouillon, donc ses lignes sont modifiables).
       await admin
         .from('journal_entry_lines')
         .update({ third_party_type: null, third_party_id: null })
-        .eq('id', line.id)
+        .eq('id', line!.id)
     })
 
     it('un tiers JAMAIS utilise reste supprimable via service_role', async () => {
