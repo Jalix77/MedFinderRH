@@ -62,6 +62,12 @@ export default async function FicheTiersPage({ params }: { params: Promise<{ id:
           </p>
         </div>
         <div className="flex items-center gap-3">
+          {tp.is_customer && (
+            <Link href={`/tiers/${id}/releve`}
+              className="rounded-lg border border-mf-border px-3 py-1.5 text-xs font-semibold text-mf-navy-700 hover:bg-slate-50">
+              Releve client
+            </Link>
+          )}
           <StatusBadge status={tp.is_active ? 'active' : 'inactive'} />
           <ActionForm
             action={setThirdPartyStatusAction}

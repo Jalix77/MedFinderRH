@@ -3709,6 +3709,15 @@ export type Database = {
         Args: { p_schema?: string }
         Returns: { function_signature: string; grantee: string }[]
       }
+      generate_customer_statement_report: {
+        Args: {
+          p_org_id: string
+          p_third_party_id: string
+          p_period_start: string
+          p_period_end: string
+        }
+        Returns: Json
+      }
       record_customer_payment: {
         Args: {
           p_invoice_id: string

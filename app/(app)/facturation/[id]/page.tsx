@@ -6,6 +6,7 @@ import { createClient } from '@/lib/supabase/server'
 import { AccessDenied } from '@/components/shell/access-denied'
 import { StatusBadge } from '@/components/finance/status-badge'
 import { ActionForm } from '@/components/finance/action-form'
+import { PaymentForm } from '@/components/finance/payment-form'
 import { formatMoney } from '@/lib/format/money'
 import {
   submitInvoiceDocumentAction,
@@ -14,6 +15,8 @@ import {
   deleteInvoiceDraftAction,
   requestInvoiceIssueExceptionAction,
   validateInvoiceIssueExceptionAction,
+  recordCustomerPaymentAction,
+  cancelCustomerPaymentAction,
 } from '@/app/actions/invoicing'
 
 export const metadata: Metadata = { title: 'Document — MedFinder Gestion' }
@@ -23,12 +26,13 @@ export default async function DocumentPage({ params }: { params: Promise<{ id: s
   const orgId = await getActiveOrganizationId()
   if (!orgId) return <AccessDenied />
 
-  const [canManage, canView, canReverse] = await Promise.all([
+  const [canManage, canView, canReverse, canRecordPayment] = await Promise.all([
     hasPermission(orgId, 'invoice.manage'),
     hasPermission(orgId, 'accounting.view'),
     hasPermission(orgId, 'accounting.reverse'),
+    hasPermission(orgId, 'payment.record'),
   ])
-  if (!canManage && !canView) return <AccessDenied />
+  if (!canManage && !canView && !canRecordPayment) return <AccessDenied />
 
   const supabase = await createClient()
   // Anti-IDOR : aucune condition d'organisation ecrite ici — la RLS ne
@@ -73,6 +77,53 @@ export default async function DocumentPage({ params }: { params: Promise<{ id: s
   const tp = doc.third_parties as { id: string; legal_name: string; third_party_code: string; tax_id: string | null } | null
   const isDraft = ['draft', 'pending_issue'].includes(doc.status)
   const isCredit = doc.document_type === 'CREDIT_NOTE'
+
+  // Un encaissement n'est propose que si le backend l'accepterait :
+  // FACTURE (jamais un avoir), emise ou partiellement payee (jamais un
+  // brouillon ni une annulee), solde restant > 0. Ces conditions ne
+  // remplacent pas les gardes de record_customer_payment — elles evitent
+  // seulement de proposer une action vouee au refus.
+  const isPayable =
+    !isCredit && ['issued', 'partially_paid'].includes(doc.status) && Number(doc.balance_due ?? 0) > 0
+
+  // Comptes de tresorerie limites a la devise de la facture : aucun
+  // paiement en devise croisee n'est possible en Phase 2C.
+  let treasuryOptions: { value: string; label: string; currency: string }[] = []
+  if (isPayable && canRecordPayment) {
+    const [{ data: cash }, { data: bank }, { data: mobile }] = await Promise.all([
+      supabase
+        .from('cash_accounts')
+        .select('id, name, currency, status')
+        .eq('currency', doc.currency)
+        .eq('status', 'active')
+        .order('name'),
+      supabase
+        .from('bank_accounts')
+        .select('id, bank_name, account_number_masked, currency, status')
+        .eq('currency', doc.currency)
+        .eq('status', 'active')
+        .order('bank_name'),
+      supabase
+        .from('mobile_money_accounts')
+        .select('id, provider, account_number_masked, currency, status')
+        .eq('currency', doc.currency)
+        .eq('status', 'active')
+        .order('provider'),
+    ])
+    treasuryOptions = [
+      ...(cash ?? []).map((a) => ({ value: `cash:${a.id}`, label: `Caisse — ${a.name}`, currency: a.currency })),
+      ...(bank ?? []).map((a) => ({
+        value: `bank:${a.id}`,
+        label: `Banque — ${a.bank_name}${a.account_number_masked ? ` (${a.account_number_masked})` : ''}`,
+        currency: a.currency,
+      })),
+      ...(mobile ?? []).map((a) => ({
+        value: `mobile_money:${a.id}`,
+        label: `Mobile money — ${a.provider}${a.account_number_masked ? ` (${a.account_number_masked})` : ''}`,
+        currency: a.currency,
+      })),
+    ]
+  }
   const pendingException = (exceptions ?? []).find((e) => e.exception_result === null)
   const label = isCredit ? 'Avoir' : 'Facture'
 
@@ -189,6 +240,26 @@ export default async function DocumentPage({ params }: { params: Promise<{ id: s
       {/* --- Encaissements --- */}
       <section className="space-y-2">
         <h2 className="text-sm font-semibold text-mf-navy-900">Encaissements</h2>
+
+        {isPayable && canRecordPayment && (
+          <div className="rounded-2xl border border-mf-border bg-mf-surface p-4 shadow-sm">
+            <h3 className="mb-3 text-sm font-medium text-mf-navy-900">Enregistrer un encaissement</h3>
+            <PaymentForm
+              action={recordCustomerPaymentAction}
+              invoiceId={id}
+              currency={doc.currency}
+              balanceDue={Number(doc.balance_due ?? 0)}
+              treasuryAccounts={treasuryOptions}
+            />
+          </div>
+        )}
+
+        {isCredit && canRecordPayment && (
+          <p className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-500">
+            Un avoir ne s&apos;encaisse pas comme une facture.
+          </p>
+        )}
+
         {(payments ?? []).length === 0 ? (
           <p className="rounded-2xl border border-mf-border bg-mf-surface p-4 text-sm text-slate-400 shadow-sm">
             Aucun encaissement enregistre pour ce document.
@@ -203,6 +274,7 @@ export default async function DocumentPage({ params }: { params: Promise<{ id: s
                   <th className="px-3 py-2">Compte</th>
                   <th className="px-3 py-2 text-right">Montant</th>
                   <th className="px-3 py-2">Statut</th>
+                  {canRecordPayment && <th className="px-3 py-2" />}
                 </tr>
               </thead>
               <tbody>
@@ -213,6 +285,26 @@ export default async function DocumentPage({ params }: { params: Promise<{ id: s
                     <td className="px-3 py-2 text-xs">{p.treasury_account_type}</td>
                     <td className="px-3 py-2 text-right">{formatMoney(p.amount, doc.currency)}</td>
                     <td className="px-3 py-2"><StatusBadge status={p.status} domain="payment" /></td>
+                    {canRecordPayment && (
+                      <td className="px-3 py-2">
+                        {p.status === 'recorded' && (
+                          <details>
+                            <summary className="cursor-pointer text-xs text-mf-danger">Annuler</summary>
+                            <div className="mt-2">
+                              <ActionForm
+                                action={cancelCustomerPaymentAction}
+                                hiddenFields={{ payment_id: p.id, invoice_id: id }}
+                                submitLabel="Confirmer l'annulation"
+                                buttonClassName="rounded-lg border border-mf-border px-3 py-1.5 text-xs font-semibold text-mf-danger hover:bg-slate-50"
+                              >
+                                <input name="reason" required placeholder="Motif"
+                                  className="w-full rounded-lg border border-mf-border px-2 py-1 text-xs" />
+                              </ActionForm>
+                            </div>
+                          </details>
+                        )}
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

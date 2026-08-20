@@ -262,6 +262,66 @@ export async function requestInvoiceIssueExceptionAction(formData: FormData) {
   revalidatePath(`/facturation/${id}`)
 }
 
+// --- Encaissements (Phase 2C.5A) ------------------------------------------
+// L'UI ne reimplemente AUCUNE regle : ni plafond de solde, ni coherence de
+// devise, ni statut encaissable. Tout est porte par record_customer_payment
+// (2C.3B), qui reste l'autorite unique et refuse en {success:false,...}.
+
+export async function recordCustomerPaymentAction(formData: FormData) {
+  const invoiceId = String(formData.get('invoice_id') ?? '')
+  if (!invoiceId) throw new Error('Facture invalide.')
+
+  const amount = Number(formData.get('amount'))
+  if (!Number.isFinite(amount) || amount <= 0) {
+    throw new Error('Le montant doit etre strictement positif.')
+  }
+
+  const treasuryRaw = String(formData.get('treasury_account') ?? '')
+  // Un seul champ "type:id" pour que l'utilisateur choisisse un compte
+  // reel plutot qu'un couple type/identifiant a assembler lui-meme.
+  const [treasuryType, treasuryId] = treasuryRaw.split(':')
+  if (!treasuryType || !treasuryId) throw new Error('Choisissez un compte de tresorerie.')
+
+  const paymentDate = String(formData.get('payment_date') ?? '')
+  if (!paymentDate) throw new Error('La date de paiement est obligatoire.')
+
+  const notes = String(formData.get('notes') ?? '').trim() || undefined
+
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('record_customer_payment', {
+    p_invoice_id: invoiceId,
+    p_amount: amount,
+    p_payment_date: paymentDate,
+    p_treasury_account_type: treasuryType,
+    p_treasury_account_id: treasuryId,
+    p_notes: notes,
+  })
+  if (error) throw new Error(error.message)
+  assertRpcSuccess(data)
+
+  revalidatePath(`/facturation/${invoiceId}`)
+  revalidatePath('/facturation')
+}
+
+export async function cancelCustomerPaymentAction(formData: FormData) {
+  const paymentId = String(formData.get('payment_id') ?? '')
+  const invoiceId = String(formData.get('invoice_id') ?? '')
+  const reason = String(formData.get('reason') ?? '').trim()
+  if (!paymentId) throw new Error('Encaissement invalide.')
+  if (!reason) throw new Error("Le motif d'annulation est obligatoire.")
+
+  const supabase = await createClient()
+  const { data, error } = await supabase.rpc('cancel_customer_payment', {
+    p_payment_id: paymentId,
+    p_reason: reason,
+  })
+  if (error) throw new Error(error.message)
+  assertRpcSuccess(data)
+
+  revalidatePath(`/facturation/${invoiceId}`)
+  revalidatePath('/facturation')
+}
+
 export async function validateInvoiceIssueExceptionAction(formData: FormData) {
   const exceptionId = String(formData.get('exception_id') ?? '')
   const documentId = String(formData.get('document_id') ?? '')
