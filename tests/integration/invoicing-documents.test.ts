@@ -613,8 +613,14 @@ describe('Phase 2C.2 — Socle documentaire de facturation', () => {
   })
 
   // ------------------------------------------------------------------
-  describe('AUCUNE comptabilisation a ce jalon (limite 2C.2 / 2C.3)', () => {
-    it('emettre un document ne cree NI ecriture comptable NI mouvement de tresorerie', async () => {
+  describe('Frontiere comptable du socle documentaire', () => {
+    // NOTE : ce bloc verifiait initialement qu'une EMISSION ne creait
+    // aucune ecriture — invariant vrai uniquement pendant la fenetre
+    // 2C.2. Depuis le jalon 2C.3, l'emission comptabilise (couvert par
+    // tests/integration/invoice-accounting.test.ts). L'invariant durable
+    // conserve ici est celui du BROUILLON : tant qu'un document n'est
+    // pas emis, il n'a AUCUN impact comptable ni tresorerie.
+    it('un document en BROUILLON ne cree ni ecriture comptable ni mouvement de tresorerie', async () => {
       const admin = adminClient()
       const { count: entriesBefore } = await admin
         .from('journal_entries')
@@ -626,9 +632,7 @@ describe('Phase 2C.2 — Socle documentaire de facturation', () => {
         .eq('organization_id', orgA)
 
       const { data: other } = await admin.from('users').select('id').eq('full_name', 'Demo Manager').single()
-      const id = await createDraft({ createdBy: other!.id as string })
-      const issued = await comptableClient.rpc('issue_invoice_document', { p_document_id: id })
-      expect((issued.data as { success: boolean }).success).toBe(true)
+      await createDraft({ createdBy: other!.id as string })
 
       const { count: entriesAfter } = await admin
         .from('journal_entries')
@@ -639,8 +643,8 @@ describe('Phase 2C.2 — Socle documentaire de facturation', () => {
         .select('id', { count: 'exact', head: true })
         .eq('organization_id', orgA)
 
-      expect(entriesAfter, 'aucune ecriture ne doit etre creee en 2C.2').toBe(entriesBefore)
-      expect(movementsAfter, 'aucun mouvement de tresorerie ne doit etre cree en 2C.2').toBe(movementsBefore)
+      expect(entriesAfter, 'un brouillon ne cree aucune ecriture').toBe(entriesBefore)
+      expect(movementsAfter, 'un brouillon ne cree aucun mouvement de tresorerie').toBe(movementsBefore)
     })
   })
 
@@ -754,9 +758,21 @@ describe('Phase 2C.2 — Socle documentaire de facturation', () => {
   // ------------------------------------------------------------------
   describe('Fiscalite : rien de code en dur', () => {
     it('aucun taux de taxe n\'est seede par la migration', async () => {
+      // L'assertion « table vide » ne peut pas tenir durablement : un
+      // taux utilise par une ligne de document emis devient
+      // insupprimable (FK on delete restrict + lignes immuables), donc
+      // les fixtures des tests 2C.3A subsistent. L'invariant REEL, lui,
+      // est durable : la migration ne cree AUCUN taux — tout taux
+      // present provient d'une creation explicite (ici, les fixtures de
+      // test, identifiables par TEST_FIXTURE_MARKER).
       const admin = adminClient()
-      const { data } = await admin.from('tax_rates').select('id, code').eq('organization_id', orgA)
-      expect(data ?? [], 'aucune fiscalite ne doit etre presumee').toEqual([])
+      const { data } = await admin
+        .from('tax_rates').select('id, code, label').eq('organization_id', orgA)
+      const notCreatedByTests = (data ?? []).filter((r) => !String(r.label).startsWith('[TEST-FIXTURE]'))
+      expect(
+        notCreatedByTests,
+        'aucune fiscalite ne doit etre presumee par la migration'
+      ).toEqual([])
     })
 
     it('une facture SANS aucun taux configure fonctionne integralement', async () => {
