@@ -17,7 +17,13 @@ const ERROR_MESSAGES: Record<string, string> = {
   not_authorized: "Vous n'avez pas la permission necessaire pour cette action.",
   self_approval_blocked: 'Vous ne pouvez pas approuver votre propre demande.',
   self_validation_blocked: "Vous ne pouvez pas valider votre propre exception — un DIRECTEUR_GENERAL ou SUPER_ADMIN distinct est requis.",
-  validator_must_be_dg: 'Seul un DIRECTEUR_GENERAL (ou SUPER_ADMIN) peut valider une exception de separation des fonctions.',
+  // La mention MFA n'est pas decorative : app_private.is_super_admin() exige
+  // AAL2 (migration 20260813100013). Un SUPER_ADMIN dont le facteur TOTP n'est
+  // pas enrole — ou dont la session est restee en AAL1 — est refuse ici alors
+  // qu'il se croit habilite. Sans cette precision le message envoie chercher
+  // un role qu'on detient deja.
+  validator_must_be_dg:
+    "Seul un DIRECTEUR_GENERAL (ou un SUPER_ADMIN) peut valider une exception de separation des fonctions — et sa session doit etre en authentification a deux facteurs.",
   no_pending_exception: 'Aucune exception en attente pour cette demande.',
   payer_is_approver: "Le payeur ne peut pas etre la meme personne que l'approbateur.",
   no_commitment_requires_budget_manage: "Un paiement sans engagement prealable exige la permission de gestion budgetaire.",

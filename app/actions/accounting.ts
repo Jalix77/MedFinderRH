@@ -4,7 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import { createClient } from '@/lib/supabase/server'
 import { getActiveOrganizationId } from '@/lib/auth/active-org'
-import { assertRpcSuccess } from '@/lib/actions/rpc-result'
+import { assertRpcSuccess, rpcErrorMessage } from '@/lib/actions/rpc-result'
 import { JournalSchema, AccountingPeriodSchema, ManualJournalEntrySchema } from '@/lib/validation/accounting'
 
 function firstIssueMessage(error: { issues: { message: string }[] }): string {
@@ -128,6 +128,31 @@ export async function approveManualJournalEntryAction(formData: FormData) {
   revalidatePath(`/comptabilite/${id}`)
 }
 
+/**
+ * Workflow d'exception de separation des fonctions (ecritures manuelles).
+ *
+ * Ces deux actions RENVOIENT leur refus au lieu de le lever. Une Error levee
+ * depuis une Server Action est remplacee par React, en build de production,
+ * par un message generique — l'operateur voyait « Minified React error #441 »
+ * a la place du motif reel, et l'exception restait en attente sans explication.
+ * Voir la note de ActionFormResult et
+ * node_modules/next/dist/docs/01-app/01-getting-started/10-error-handling.md.
+ *
+ * AUCUNE regle comptable ni de separation des fonctions n'est modifiee : les
+ * RPC restent l'unique autorite, leurs refus sont seulement rendus lisibles.
+ */
+function refusalOf(
+  data: unknown,
+  error: { message: string } | null
+): { error: string } | undefined {
+  if (error) return { error: error.message }
+  if (data && typeof data === 'object' && 'success' in data && (data as { success: unknown }).success === false) {
+    const code = 'error' in data ? String((data as { error: unknown }).error) : 'unknown_error'
+    return { error: rpcErrorMessage(code) }
+  }
+  return undefined
+}
+
 export async function requestManualEntryApprovalExceptionAction(formData: FormData) {
   const id = String(formData.get('id') ?? '')
   const justification = String(formData.get('justification') ?? '')
@@ -136,8 +161,9 @@ export async function requestManualEntryApprovalExceptionAction(formData: FormDa
     p_entry_id: id,
     p_justification: justification,
   })
-  if (error) throw new Error(error.message)
-  assertRpcSuccess(data)
+  const refusal = refusalOf(data, error)
+  if (refusal) return refusal
+
   revalidatePath(`/comptabilite/${id}`)
 }
 
@@ -151,8 +177,9 @@ export async function validateManualEntryApprovalExceptionAction(formData: FormD
     p_result: result,
     p_comment: comment,
   })
-  if (error) throw new Error(error.message)
-  assertRpcSuccess(data)
+  const refusal = refusalOf(data, error)
+  if (refusal) return refusal
+
   revalidatePath('/comptabilite')
   revalidatePath(`/comptabilite/${id}`)
 }

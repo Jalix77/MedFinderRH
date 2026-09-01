@@ -356,6 +356,71 @@ describe('Phase 2A — Ecritures manuelles (separation saisie/validation)', () =
       const { data: after } = await admin.from('journal_entries').select('status').eq('id', entryId).single()
       expect(after?.status).toBe('approved')
     })
+
+    // Parcours reel signale en exploitation : le createur est aussi le seul
+    // approbateur possible, il demande l'exception approver_is_creator, et un
+    // SUPER_ADMIN distinct la valide. On verifie la chaine ENTIERE jusqu'a la
+    // comptabilisation — c'est elle qui compte pour l'operateur, pas le seul
+    // passage a "approved".
+    it('createur = approbateur : exception validee par un SUPER_ADMIN distinct, puis ecriture comptabilisee', async () => {
+      const ctx = await setupFixtures(`excsa${Date.now()}`)
+      const { client: creator, userId: creatorId } = await signInAs('comptable.demo@medfinder.test')
+      const entryId = await createAndSubmit(creator, ctx, 90)
+
+      // Le blocage strict s'applique bien AVANT toute exception.
+      const { data: blocked } = await creator.rpc('approve_manual_journal_entry', {
+        p_entry_id: entryId,
+        p_decision: 'approved',
+      })
+      expect((blocked as { success: boolean; error: string })?.success).toBe(false)
+      expect((blocked as { success: boolean; error: string })?.error).toBe('self_approval_blocked')
+
+      const { data: reqData, error: reqError } = await creator.rpc('request_manual_entry_approval_exception', {
+        p_entry_id: entryId,
+        p_justification: tag('Comptable seul approbateur disponible'),
+      })
+      expect(reqError).toBeNull()
+      expect((reqData as { success: boolean })?.success).toBe(true)
+
+      const { client: superClient, userId: superId, deElevate } = await signInAsElevated('super.demo@medfinder.test')
+      expect(superId, 'le validateur doit etre distinct du demandeur').not.toBe(creatorId)
+      try {
+        const { data, error } = await superClient.rpc('validate_manual_entry_approval_exception', {
+          p_entry_id: entryId,
+          p_result: 'approved',
+        })
+        expect(error).toBeNull()
+        expect((data as { success: boolean; error?: string })?.success, JSON.stringify(data)).toBe(true)
+
+        // L'ecriture est approuvee, puis comptabilisee.
+        const { data: posted, error: postError } = await superClient.rpc('post_journal_entry', {
+          p_entry_id: entryId,
+        })
+        expect(postError).toBeNull()
+        expect((posted as { success: boolean; error?: string })?.success, JSON.stringify(posted)).toBe(true)
+      } finally {
+        await deElevate()
+      }
+
+      const admin = adminClient()
+      const { data: final } = await admin
+        .from('journal_entries')
+        .select('status')
+        .eq('id', entryId)
+        .single()
+      expect(final?.status).toBe('posted')
+
+      // La trace de l'exception est conservee et attribuee.
+      const { data: approval } = await admin
+        .from('journal_entry_approvals')
+        .select('exception_requested_by, exception_validated_by, exception_result')
+        .eq('entry_id', entryId)
+        .not('exception_requested_by', 'is', null)
+        .single()
+      expect(approval?.exception_requested_by).toBe(creatorId)
+      expect(approval?.exception_validated_by).toBe(superId)
+      expect(approval?.exception_result).toBe('approved')
+    })
   })
 
   describe('Isolation multi-organisation', () => {
