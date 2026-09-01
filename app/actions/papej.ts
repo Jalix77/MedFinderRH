@@ -15,6 +15,7 @@ export async function createGrantAction(formData: FormData) {
   if (!orgId) throw new Error('Aucune organisation active.')
 
   const parsed = GrantSchema.safeParse({
+    type: formData.get('type') || 'PAPEJ',
     name: formData.get('name'),
     donor_name: formData.get('donor_name') || null,
     amount_granted: formData.get('amount_granted'),
