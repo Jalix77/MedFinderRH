@@ -41,11 +41,91 @@ describe('Phase 2C.2 — Socle documentaire de facturation', () => {
     revenueAccountA = acct!.id as string
 
     customerA = (await createCustomer(orgA, `client-principal-${Date.now()}`)).id
+
+    await ensureOpenPeriodForToday(orgA)
+    await ensureOpenPeriodForToday(orgB)
   })
 
   afterAll(async () => {
     await registry.cleanup(adminClient())
   })
+
+  /**
+   * Provisionne une periode comptable OUVERTE couvrant la date du jour —
+   * celle qu'utilisent tous les scenarios d'emission de cette suite.
+   *
+   * Sans cela la suite dependait a la fois d'une periode preexistante en
+   * base ET du mois d'execution : le 2026-09-01, l'emission s'est mise a
+   * repondre `no_accounting_period` parce que le socle ne provisionnait
+   * les periodes que jusqu'en aout. La suite provisionne desormais la
+   * sienne, quel que soit le mois ou elle tourne.
+   *
+   * Aucune regle comptable n'est touchee : c'est une donnee de fixture
+   * creee via les tables publiques, exactement comme le font deja les
+   * tests de periode FERMEE pour leurs propres scenarios.
+   */
+  async function ensureOpenPeriodForToday(orgId: string) {
+    const admin = adminClient()
+    const today = new Date()
+    const day = today.toISOString().slice(0, 10)
+    const year = today.getUTCFullYear()
+    const month = today.getUTCMonth() + 1
+
+    // Periodes que app_private.find_period_for_date() peut deja resoudre
+    // pour CETTE date : meme organisation, exercice couvrant le jour,
+    // meme mois.
+    const { data: fys } = await admin
+      .from('fiscal_years')
+      .select('id')
+      .eq('organization_id', orgId)
+      .lte('start_date', day)
+      .gte('end_date', day)
+    const fyIds = (fys ?? []).map((f: { id: string }) => f.id)
+
+    const existing: { id: string; status: string }[] = fyIds.length
+      ? ((
+          await admin
+            .from('accounting_periods')
+            .select('id, status')
+            .in('fiscal_year_id', fyIds)
+            .eq('month', month)
+        ).data ?? [])
+      : []
+
+    // find_period_for_date() ne filtre pas sur le statut et fait `limit 1`
+    // sans ORDER BY : une periode FERMEE concurrente rendrait la
+    // resolution non deterministe. On echoue bruyamment plutot que de
+    // laisser passer un resultat aleatoire.
+    const closed = existing.filter((p) => p.status !== 'open')
+    if (closed.length > 0) {
+      throw new Error(
+        `Periode comptable FERMEE deja presente pour l'organisation ${orgId} au ${day} — ` +
+          `resolution non deterministe (ids: ${closed.map((p) => p.id).join(', ')}).`
+      )
+    }
+    if (existing.length > 0) return
+
+    const { data: fy, error: fyErr } = await admin
+      .from('fiscal_years')
+      .insert({
+        organization_id: orgId,
+        label: tag(`FY-OUVERT-${year}`),
+        start_date: `${year}-01-01`,
+        end_date: `${year}-12-31`,
+      })
+      .select('id')
+      .single()
+    if (fyErr) throw fyErr
+    registry.track('fiscal_years', fy!.id as string)
+
+    const { data: period, error: pErr } = await admin
+      .from('accounting_periods')
+      .insert({ organization_id: orgId, fiscal_year_id: fy!.id, month, status: 'open' })
+      .select('id')
+      .single()
+    if (pErr) throw pErr
+    registry.track('accounting_periods', period!.id as string)
+  }
 
   async function createCustomer(orgId: string, label: string) {
     const admin = adminClient()

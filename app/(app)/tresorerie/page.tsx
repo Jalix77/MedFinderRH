@@ -74,9 +74,14 @@ export default async function TreasuryPage() {
           <h1 className="text-xl font-bold text-mf-navy-900">Tresorerie</h1>
           <p className="text-sm text-slate-500">Caisses, comptes bancaires, mobile money.</p>
         </div>
-        <Link href="/tresorerie/mouvements" className="text-sm font-medium text-mf-navy-700 hover:underline">
-          Voir les mouvements →
-        </Link>
+        <div className="flex items-center gap-4">
+          <Link href="/tresorerie/rapprochement" className="text-sm font-medium text-mf-navy-700 hover:underline">
+            Rapprochement →
+          </Link>
+          <Link href="/tresorerie/mouvements" className="text-sm font-medium text-mf-navy-700 hover:underline">
+            Voir les mouvements →
+          </Link>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">

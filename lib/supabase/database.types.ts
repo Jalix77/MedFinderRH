@@ -1388,6 +1388,230 @@ export type Database = {
           },
         ]
       }
+      bank_reconciliation_matches: {
+        Row: {
+          amount_difference: number
+          cash_movement_id: string
+          created_at: string
+          created_by: string | null
+          date_difference_days: number
+          id: string
+          match_type: string
+          notes: string | null
+          organization_id: string
+          proposed_at: string
+          proposed_by: string | null
+          rejection_reason: string | null
+          statement_line_id: string
+          status: string
+          updated_at: string
+          updated_by: string | null
+          validated_at: string | null
+          validated_by: string | null
+        }
+        Insert: {
+          amount_difference?: number
+          cash_movement_id: string
+          created_at?: string
+          created_by?: string | null
+          date_difference_days?: number
+          id?: string
+          match_type: string
+          notes?: string | null
+          organization_id: string
+          proposed_at?: string
+          proposed_by?: string | null
+          rejection_reason?: string | null
+          statement_line_id: string
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+          validated_at?: string | null
+          validated_by?: string | null
+        }
+        Update: {
+          amount_difference?: number
+          cash_movement_id?: string
+          created_at?: string
+          created_by?: string | null
+          date_difference_days?: number
+          id?: string
+          match_type?: string
+          notes?: string | null
+          organization_id?: string
+          proposed_at?: string
+          proposed_by?: string | null
+          rejection_reason?: string | null
+          statement_line_id?: string
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+          validated_at?: string | null
+          validated_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bank_reconciliation_matches_statement_line_id_fkey"
+            columns: ["statement_line_id"]
+            isOneToOne: false
+            referencedRelation: "bank_statement_lines"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "bank_reconciliation_matches_cash_movement_id_fkey"
+            columns: ["cash_movement_id"]
+            isOneToOne: false
+            referencedRelation: "cash_movements"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      bank_statement_imports: {
+        Row: {
+          cancel_reason: string | null
+          cancelled_at: string | null
+          cancelled_by: string | null
+          closing_balance_statement: number
+          content_hash: string
+          created_at: string
+          created_by: string | null
+          currency: string
+          file_name: string | null
+          id: string
+          imported_at: string
+          imported_by: string | null
+          line_count: number
+          opening_balance_statement: number
+          organization_id: string
+          period_end: string
+          period_start: string
+          source_format: string
+          statement_reference: string
+          status: string
+          treasury_account_id: string
+          treasury_account_type: string
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          closing_balance_statement?: number
+          content_hash: string
+          created_at?: string
+          created_by?: string | null
+          currency: string
+          file_name?: string | null
+          id?: string
+          imported_at?: string
+          imported_by?: string | null
+          line_count?: number
+          opening_balance_statement?: number
+          organization_id: string
+          period_end: string
+          period_start: string
+          source_format?: string
+          statement_reference: string
+          status?: string
+          treasury_account_id: string
+          treasury_account_type: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          cancel_reason?: string | null
+          cancelled_at?: string | null
+          cancelled_by?: string | null
+          closing_balance_statement?: number
+          content_hash?: string
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          file_name?: string | null
+          id?: string
+          imported_at?: string
+          imported_by?: string | null
+          line_count?: number
+          opening_balance_statement?: number
+          organization_id?: string
+          period_end?: string
+          period_start?: string
+          source_format?: string
+          statement_reference?: string
+          status?: string
+          treasury_account_id?: string
+          treasury_account_type?: string
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
+      bank_statement_lines: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          currency: string
+          direction: string
+          external_reference: string | null
+          id: string
+          import_id: string
+          label: string
+          line_number: number
+          organization_id: string
+          raw_line: Json | null
+          status: string
+          updated_at: string
+          updated_by: string | null
+          value_date: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by?: string | null
+          currency: string
+          direction: string
+          external_reference?: string | null
+          id?: string
+          import_id: string
+          label: string
+          line_number: number
+          organization_id: string
+          raw_line?: Json | null
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+          value_date: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          currency?: string
+          direction?: string
+          external_reference?: string | null
+          id?: string
+          import_id?: string
+          label?: string
+          line_number?: number
+          organization_id?: string
+          raw_line?: Json | null
+          status?: string
+          updated_at?: string
+          updated_by?: string | null
+          value_date?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bank_statement_lines_import_id_fkey"
+            columns: ["import_id"]
+            isOneToOne: false
+            referencedRelation: "bank_statement_imports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       budget_commitments: {
         Row: {
           amount: number
@@ -3708,6 +3932,45 @@ export type Database = {
       debug_unwanted_function_grants: {
         Args: { p_schema?: string }
         Returns: { function_signature: string; grantee: string }[]
+      }
+      cancel_bank_statement_import: {
+        Args: { p_import_id: string; p_reason: string }
+        Returns: Json
+      }
+      create_manual_bank_match: {
+        Args: { p_statement_line_id: string; p_cash_movement_id: string; p_notes?: string }
+        Returns: Json
+      }
+      generate_bank_reconciliation_report: {
+        Args: { p_import_id: string }
+        Returns: Json
+      }
+      import_bank_statement: {
+        Args: {
+          p_org_id: string
+          p_treasury_account_type: string
+          p_treasury_account_id: string
+          p_statement_reference: string
+          p_period_start: string
+          p_period_end: string
+          p_opening_balance: number
+          p_closing_balance: number
+          p_lines: Json
+          p_file_name?: string
+        }
+        Returns: Json
+      }
+      propose_bank_reconciliation: {
+        Args: { p_import_id: string; p_date_tolerance_days?: number }
+        Returns: Json
+      }
+      reject_bank_match: {
+        Args: { p_match_id: string; p_reason: string }
+        Returns: Json
+      }
+      validate_bank_match: {
+        Args: { p_match_id: string }
+        Returns: Json
       }
       generate_customer_statement_report: {
         Args: {

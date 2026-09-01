@@ -378,3 +378,92 @@ export async function createPostedJournalEntry(label: string, amount: number) {
     cleanup: () => registry.cleanup(admin),
   }
 }
+
+/**
+ * Phase 2D — compte de tresorerie dedie portant UN mouvement, pret a etre
+ * rapproche contre un releve importe depuis l'UI.
+ *
+ * Compte dedie a chaque test : le rapprochement automatique n'emet une
+ * proposition que s'il existe EXACTEMENT UN mouvement candidat. Un compte
+ * partage rendrait ce determinisme dependant de l'etat accumule du projet.
+ */
+export async function createTreasuryAccountWithMovement(
+  label: string,
+  opts: { amount: number; date: string }
+) {
+  const admin = adminClient()
+  const registry = new FixtureRegistry()
+  const orgId = await getOrgAId()
+
+  const { data: gl, error: glErr } = await admin
+    .from('chart_of_accounts')
+    .insert({
+      organization_id: orgId,
+      code: `E2E-RAP-${Date.now()}`,
+      label: tag(`Caisse ${label}`),
+      type: 'asset',
+    })
+    .select('id')
+    .single()
+  if (glErr) throw glErr
+  registry.track('chart_of_accounts', gl!.id as string)
+
+  const accountName = tag(`Caisse ${label}`)
+  const { data: acc, error: accErr } = await admin
+    .from('cash_accounts')
+    .insert({ organization_id: orgId, name: accountName, currency: 'HTG', gl_account_id: gl!.id })
+    .select('id')
+    .single()
+  if (accErr) throw accErr
+  registry.track('cash_accounts', acc!.id as string)
+
+  const { data: mv, error: mvErr } = await admin
+    .from('cash_movements')
+    .insert({
+      organization_id: orgId,
+      treasury_account_type: 'cash',
+      treasury_account_id: acc!.id,
+      direction: 'in',
+      amount: opts.amount,
+      currency: 'HTG',
+      movement_date: opts.date,
+      reference_type: 'manual',
+      description: tag(`Mouvement ${label}`),
+    })
+    .select('id')
+    .single()
+  if (mvErr) throw mvErr
+  registry.track('cash_movements', mv!.id as string)
+
+  return {
+    orgId,
+    accountId: acc!.id as string,
+    accountName,
+    movementId: mv!.id as string,
+    cleanup: () => registry.cleanup(admin),
+  }
+}
+
+/**
+ * Nettoyage d'un import cree PAR L'UI pendant un test (donc jamais suivi
+ * par un FixtureRegistry). L'ordre est impose par les FK :
+ * bank_reconciliation_matches est `on delete restrict` vers les lignes ET
+ * vers les mouvements, donc les rapprochements partent en premier ; les
+ * lignes partent ensuite en cascade avec l'import.
+ *
+ * Un rapprochement VALIDE resiste volontairement a la suppression
+ * (app_private.bank_matches_immutable_once_validated) : le nettoyage est
+ * best-effort et ne doit jamais faire echouer le test lui-meme.
+ */
+export async function cleanupBankStatementImport(importId: string) {
+  const admin = adminClient()
+  const { data: lines } = await admin
+    .from('bank_statement_lines')
+    .select('id')
+    .eq('import_id', importId)
+  const lineIds = ((lines ?? []) as { id: string }[]).map((l) => l.id)
+  if (lineIds.length > 0) {
+    await admin.from('bank_reconciliation_matches').delete().in('statement_line_id', lineIds)
+  }
+  await admin.from('bank_statement_imports').delete().eq('id', importId)
+}
