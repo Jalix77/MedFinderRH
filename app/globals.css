@@ -9,6 +9,13 @@
   --mf-navy-900: #0f2a4a;
   --mf-navy-800: #163a63;
   --mf-navy-700: #1d4b7d;
+  /* mf-emerald-700 etait employe 10 fois dans l'application sans avoir
+     jamais ete declare : Tailwind n'emet aucune regle pour un utilitaire
+     inconnu (verifie dans le CSS de production, 0 occurrence de
+     .text-mf-emerald-700), donc ces elements heritaient de la couleur de
+     leur parent au lieu du vert attendu. Valeur alignee sur la rampe
+     Tailwind, comme le sont deja 500 et 600. */
+  --mf-emerald-700: #047857;
   --mf-emerald-600: #059669;
   --mf-emerald-500: #10b981;
   --mf-emerald-50: #ecfdf5;
@@ -24,6 +31,7 @@
   --color-mf-navy-900: var(--mf-navy-900);
   --color-mf-navy-800: var(--mf-navy-800);
   --color-mf-navy-700: var(--mf-navy-700);
+  --color-mf-emerald-700: var(--mf-emerald-700);
   --color-mf-emerald-600: var(--mf-emerald-600);
   --color-mf-emerald-500: var(--mf-emerald-500);
   --color-mf-emerald-50: var(--mf-emerald-50);
