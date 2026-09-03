@@ -313,4 +313,189 @@ describe('Phase 1C.3 — Budget', () => {
       expect(data ?? []).toEqual([])
     })
   })
+
+  // ==================================================================
+  /**
+   * Modification et suppression d'une ligne budgetaire.
+   *
+   * Le controle est en BASE, pas dans l'ecran : les policies
+   * budget_lines_update et budget_lines_delete exigent toutes deux que le
+   * budget parent soit encore 'draft'. Ces tests appellent donc PostgREST
+   * directement, sans passer par l'interface, pour prouver qu'un client
+   * malveillant ne peut pas contourner la regle en masquant l'UI.
+   */
+  describe('Lignes budgetaires : modification et suppression en brouillon', () => {
+    async function draftBudgetLine(plannedAmount: number, label: string) {
+      const admin = adminClient()
+      const { data: fy } = await admin
+        .from('fiscal_years')
+        .insert({
+          organization_id: orgA,
+          label: tag(`BUD-${label}`),
+          start_date: '2029-01-01',
+          end_date: '2029-12-31',
+        })
+        .select('id')
+        .single()
+      registry.track('fiscal_years', fy!.id as string)
+
+      const { data: budget } = await admin
+        .from('budgets')
+        .insert({
+          organization_id: orgA,
+          fiscal_year_id: fy!.id,
+          name: tag(`Budget ${label}`),
+          status: 'draft',
+        })
+        .select('id')
+        .single()
+      registry.track('budgets', budget!.id as string)
+
+      const { data: line } = await admin
+        .from('budget_lines')
+        .insert({
+          organization_id: orgA,
+          budget_id: budget!.id,
+          category: tag(`Categorie ${label}`),
+          planned_amount: plannedAmount,
+        })
+        .select('id')
+        .single()
+      registry.track('budget_lines', line!.id as string)
+
+      return { budgetId: budget!.id as string, lineId: line!.id as string }
+    }
+
+    it('BROUILLON : la ligne est modifiable', async () => {
+      const { lineId } = await draftBudgetLine(1000, `upd${Date.now()}`)
+      const { client } = await signInAs('comptable.demo@medfinder.test')
+      const { data, error } = await client
+        .from('budget_lines')
+        .update({ planned_amount: 1500 })
+        .eq('id', lineId)
+        .select('id, planned_amount')
+      expect(error).toBeNull()
+      expect(data).toHaveLength(1)
+      expect(Number(data![0].planned_amount)).toBe(1500)
+    })
+
+    it('BROUILLON : la ligne sans engagement est supprimable', async () => {
+      const { lineId } = await draftBudgetLine(800, `del${Date.now()}`)
+      const { client } = await signInAs('comptable.demo@medfinder.test')
+      const { data, error } = await client.from('budget_lines').delete().eq('id', lineId).select('id')
+      expect(error).toBeNull()
+      expect(data).toHaveLength(1)
+
+      const { data: after } = await adminClient()
+        .from('budget_lines')
+        .select('id')
+        .eq('id', lineId)
+      expect(after ?? []).toEqual([])
+    })
+
+    it('APPROUVE : la modification est refusee (aucune ligne touchee)', async () => {
+      const { lineId } = await approvedBudgetLine(orgA, 1000, `noupd${Date.now()}`)
+      const { client } = await signInAs('comptable.demo@medfinder.test')
+      const { data, error } = await client
+        .from('budget_lines')
+        .update({ planned_amount: 9999 })
+        .eq('id', lineId)
+        .select('id')
+      // RLS filtre silencieusement : aucune erreur, mais aucune ligne
+      // affectee. C'est precisement ce que la Server Action detecte pour
+      // afficher un refus au lieu d'un faux succes.
+      expect(error).toBeNull()
+      expect(data ?? []).toEqual([])
+
+      const { data: after } = await adminClient()
+        .from('budget_lines')
+        .select('planned_amount')
+        .eq('id', lineId)
+        .single()
+      expect(Number(after!.planned_amount)).toBe(1000)
+    })
+
+    it('APPROUVE : la suppression est refusee, la ligne subsiste', async () => {
+      const { lineId } = await approvedBudgetLine(orgA, 700, `nodel${Date.now()}`)
+      const { client } = await signInAs('comptable.demo@medfinder.test')
+      const { data, error } = await client.from('budget_lines').delete().eq('id', lineId).select('id')
+      expect(error).toBeNull()
+      expect(data ?? []).toEqual([])
+
+      const { data: after } = await adminClient().from('budget_lines').select('id').eq('id', lineId)
+      expect(after).toHaveLength(1)
+    })
+
+    it('ENGAGEMENTS : une ligne engagee n\'est jamais supprimable, meme en brouillon', async () => {
+      const admin = adminClient()
+      const { budgetId, lineId } = await draftBudgetLine(5000, `eng${Date.now()}`)
+
+      // L'engagement est cree via la RPC metier, seule voie autorisee.
+      // Elle exige un budget opposable : on approuve, on engage, puis on
+      // repasse le budget en brouillon pour isoler la SEULE variable
+      // testee ici — la presence d'un engagement.
+      await admin.from('budgets').update({ status: 'approved' }).eq('id', budgetId)
+      const { client } = await signInAs('comptable.demo@medfinder.test')
+      const { data: commitData, error: commitError } = await client.rpc('commit_budget_line', {
+        p_budget_line_id: lineId,
+        p_reference_type: 'expense_request',
+        p_reference_id: '00000000-0000-0000-0000-000000000000',
+        p_amount: 1200,
+      })
+      expect(commitError).toBeNull()
+      expect((commitData as { success: boolean })?.success, JSON.stringify(commitData)).toBe(true)
+      await registry.trackDerivedFrom(admin, 'budget_commitments', 'budget_line_id', [lineId])
+
+      await admin.from('budgets').update({ status: 'draft' }).eq('id', budgetId)
+
+      const { error } = await client.from('budget_lines').delete().eq('id', lineId).select('id')
+      // Refus porte par la cle etrangere `on delete restrict` de
+      // budget_commitments : la garantie est structurelle, pas applicative.
+      expect(error).not.toBeNull()
+      expect(error!.code).toBe('23503')
+
+      const { data: after } = await admin.from('budget_lines').select('id').eq('id', lineId)
+      expect(after, 'la ligne engagee doit subsister').toHaveLength(1)
+    })
+
+    it('IDOR : un acteur d\'Org B ne peut ni modifier ni supprimer une ligne d\'Org A', async () => {
+      const { lineId } = await draftBudgetLine(400, `idor${Date.now()}`)
+      const { client } = await signInAs('orgb.demo@medfinder.test')
+
+      const { data: updated } = await client
+        .from('budget_lines')
+        .update({ planned_amount: 1 })
+        .eq('id', lineId)
+        .select('id')
+      expect(updated ?? []).toEqual([])
+
+      const { data: deleted } = await client.from('budget_lines').delete().eq('id', lineId).select('id')
+      expect(deleted ?? []).toEqual([])
+
+      const { data: after } = await adminClient()
+        .from('budget_lines')
+        .select('planned_amount')
+        .eq('id', lineId)
+        .single()
+      expect(Number(after!.planned_amount)).toBe(400)
+    })
+
+    it('SANS PERMISSION : un role sans budget.manage ne peut ni modifier ni supprimer', async () => {
+      const { lineId } = await draftBudgetLine(300, `noperm${Date.now()}`)
+      const { client } = await signInAs('support.demo@medfinder.test')
+
+      const { data: updated } = await client
+        .from('budget_lines')
+        .update({ planned_amount: 1 })
+        .eq('id', lineId)
+        .select('id')
+      expect(updated ?? []).toEqual([])
+
+      const { data: deleted } = await client.from('budget_lines').delete().eq('id', lineId).select('id')
+      expect(deleted ?? []).toEqual([])
+
+      const { data: after } = await adminClient().from('budget_lines').select('id').eq('id', lineId)
+      expect(after).toHaveLength(1)
+    })
+  })
 })

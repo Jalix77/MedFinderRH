@@ -105,6 +105,97 @@ export async function createBudgetLineAction(formData: FormData) {
   revalidatePath(`/budget/${budgetId}`)
 }
 
+/**
+ * Modification d'une ligne budgetaire.
+ *
+ * Le controle est SERVEUR et non applicatif : la policy
+ * `budget_lines_update` n'autorise l'UPDATE que si le budget parent est
+ * 'draft' et si l'acteur porte `budget.manage`. Aucune verification n'est
+ * donc reecrite ici, ce qui creerait une seconde autorite.
+ *
+ * En revanche, RLS filtre SILENCIEUSEMENT : un UPDATE refuse ne leve pas
+ * d'erreur, il ne touche simplement aucune ligne. Sans le `.select()`
+ * ci-dessous, l'ecran afficherait un succes pour une operation refusee.
+ */
+export async function updateBudgetLineAction(formData: FormData) {
+  const orgId = await getActiveOrganizationId()
+  if (!orgId) throw new Error('Aucune organisation active.')
+
+  const lineId = String(formData.get('line_id') ?? '')
+  const budgetId = String(formData.get('budget_id') ?? '')
+  if (!lineId) throw new Error('Ligne budgetaire invalide.')
+
+  const parsed = BudgetLineSchema.safeParse({
+    budget_id: budgetId,
+    category: formData.get('category'),
+    planned_amount: formData.get('planned_amount'),
+    currency: formData.get('currency') || 'HTG',
+    cost_center_id: formData.get('cost_center_id') || null,
+  })
+  if (!parsed.success) throw new Error(firstIssueMessage(parsed.error))
+
+  const supabase = await createClient()
+  const { data, error } = await supabase
+    .from('budget_lines')
+    .update({
+      category: parsed.data.category,
+      planned_amount: parsed.data.planned_amount,
+      currency: parsed.data.currency,
+      cost_center_id: parsed.data.cost_center_id ?? null,
+    })
+    .eq('id', lineId)
+    .select('id')
+  if (error) throw new Error(error.message)
+  if (!data || data.length === 0) {
+    throw new Error(
+      "Modification refusee : la ligne n'est modifiable que tant que le budget est en brouillon, et avec la permission de gestion budgetaire."
+    )
+  }
+
+  revalidatePath(`/budget/${budgetId}`)
+  revalidatePath('/budget')
+}
+
+/**
+ * Suppression d'une ligne budgetaire.
+ *
+ * Deux refus distincts, tous deux poses en BASE :
+ *   - budget non brouillon ou permission absente -> la policy
+ *     `budget_lines_delete` ne selectionne aucune ligne (refus silencieux,
+ *     rendu explicite ici comme pour l'UPDATE) ;
+ *   - ligne portant des engagements, des demandes de depense ou une ligne
+ *     de financement -> les cles etrangeres `on delete restrict` levent
+ *     23503. Le message est traduit, la regle n'est pas reimplementee.
+ */
+export async function deleteBudgetLineAction(formData: FormData) {
+  const orgId = await getActiveOrganizationId()
+  if (!orgId) throw new Error('Aucune organisation active.')
+
+  const lineId = String(formData.get('line_id') ?? '')
+  const budgetId = String(formData.get('budget_id') ?? '')
+  if (!lineId) throw new Error('Ligne budgetaire invalide.')
+
+  const supabase = await createClient()
+  const { data, error } = await supabase.from('budget_lines').delete().eq('id', lineId).select('id')
+
+  if (error) {
+    if (error.code === '23503') {
+      throw new Error(
+        'Suppression impossible : cette ligne porte des engagements, des demandes de depense ou un financement. Liberez-les d’abord.'
+      )
+    }
+    throw new Error(error.message)
+  }
+  if (!data || data.length === 0) {
+    throw new Error(
+      "Suppression refusee : une ligne n'est supprimable que tant que le budget est en brouillon, et avec la permission de gestion budgetaire."
+    )
+  }
+
+  revalidatePath(`/budget/${budgetId}`)
+  revalidatePath('/budget')
+}
+
 export async function transferBudgetAmountAction(formData: FormData) {
   const budgetId = String(formData.get('budget_id') ?? '')
   const parsed = BudgetTransferSchema.safeParse({

@@ -5,7 +5,12 @@ import { createClient } from '@/lib/supabase/server'
 import { AccessDenied } from '@/components/shell/access-denied'
 import { StatusBadge } from '@/components/finance/status-badge'
 import { formatMoney } from '@/lib/format/money'
-import { createBudgetLineAction, setBudgetStatusAction } from '@/app/actions/budget'
+import {
+  createBudgetLineAction,
+  setBudgetStatusAction,
+  updateBudgetLineAction,
+  deleteBudgetLineAction,
+} from '@/app/actions/budget'
 import { TransferForm } from '@/components/finance/transfer-form'
 
 export const metadata: Metadata = { title: 'Budget — MedFinder Gestion' }
@@ -67,6 +72,13 @@ export default async function BudgetDetailPage({ params }: PageProps) {
   const balanceByLineId = new Map((balancesRows ?? []).map((b) => [b.budget_line_id, b]))
   const lines = (rawLines ?? []).map((l) => ({ ...l, balance: balanceByLineId.get(l.id) ?? null }))
 
+  // Modification et suppression d'une ligne uniquement tant que le budget
+  // est un brouillon. Ce booleen ne fait que refleter la regle : elle est
+  // posee en base par les policies budget_lines_update / _delete, qui
+  // exigent toutes deux `budgets.status = 'draft'`. Masquer les controles
+  // evite de proposer une action vouee au refus, il ne la garantit pas.
+  const canEditLines = canManage && budget.status === 'draft'
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -101,25 +113,129 @@ export default async function BudgetDetailPage({ params }: PageProps) {
                 <th className="py-1 pr-4">Prevu</th>
                 <th className="py-1 pr-4">Engage</th>
                 <th className="py-1 pr-4">Disponible</th>
+                {canEditLines && <th className="py-1"></th>}
               </tr>
             </thead>
             <tbody>
               {lines.map((l) => {
                 const balance = l.balance
+                const committed = Number(balance?.committed_open ?? 0)
                 return (
-                  <tr key={l.id} className="border-t border-mf-border">
+                  <tr key={l.id} className="border-t border-mf-border align-top">
                     <td className="py-2 pr-4 text-mf-navy-900">{l.category}</td>
                     <td className="py-2 pr-4">{formatMoney(l.planned_amount, l.currency)}</td>
-                    <td className="py-2 pr-4 text-amber-700">{formatMoney(balance?.committed_open ?? 0, l.currency)}</td>
+                    <td className="py-2 pr-4 text-amber-700">{formatMoney(committed, l.currency)}</td>
                     <td className="py-2 pr-4 font-medium text-mf-emerald-700">
                       {formatMoney(balance?.available_amount ?? 0, l.currency)}
                     </td>
+                    {canEditLines && (
+                      <td className="py-2">
+                        <details>
+                          <summary className="cursor-pointer text-xs font-medium text-mf-navy-700">
+                            Modifier
+                          </summary>
+                          <form
+                            action={updateBudgetLineAction}
+                            className="mt-2 grid grid-cols-2 gap-2 rounded-lg border border-mf-border p-2"
+                          >
+                            <input type="hidden" name="line_id" value={l.id} />
+                            <input type="hidden" name="budget_id" value={budget.id} />
+                            <input type="hidden" name="currency" value={l.currency} />
+                            <div>
+                              <label
+                                htmlFor={`cat-${l.id}`}
+                                className="block text-xs font-medium text-mf-navy-900"
+                              >
+                                Categorie
+                              </label>
+                              <input
+                                id={`cat-${l.id}`}
+                                name="category"
+                                required
+                                defaultValue={l.category}
+                                className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm"
+                              />
+                            </div>
+                            <div>
+                              <label
+                                htmlFor={`amt-${l.id}`}
+                                className="block text-xs font-medium text-mf-navy-900"
+                              >
+                                Montant planifie
+                              </label>
+                              <input
+                                id={`amt-${l.id}`}
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                name="planned_amount"
+                                required
+                                defaultValue={String(l.planned_amount)}
+                                className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm"
+                              />
+                            </div>
+                            <div className="col-span-2">
+                              <label
+                                htmlFor={`cc-${l.id}`}
+                                className="block text-xs font-medium text-mf-navy-900"
+                              >
+                                Centre de couts
+                              </label>
+                              <select
+                                id={`cc-${l.id}`}
+                                name="cost_center_id"
+                                defaultValue={l.cost_center_id ?? ''}
+                                className="mt-1 w-full rounded-lg border border-mf-border px-3 py-2 text-sm"
+                              >
+                                <option value="">—</option>
+                                {(costCenters ?? []).map((c) => (
+                                  <option key={c.id} value={c.id}>
+                                    {c.code} — {c.name}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                            <div className="col-span-2 flex items-center gap-3">
+                              <button
+                                type="submit"
+                                className="rounded-lg bg-mf-emerald-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-mf-emerald-500"
+                              >
+                                Enregistrer
+                              </button>
+                            </div>
+                          </form>
+
+                          {/* La suppression n'est proposee que si la ligne
+                              ne porte aucun engagement. Le refus reste
+                              garanti en base par les cles etrangeres
+                              `on delete restrict` : masquer le bouton
+                              evite une erreur previsible, il ne remplace
+                              pas le controle. */}
+                          {committed === 0 ? (
+                            <form action={deleteBudgetLineAction} className="mt-2">
+                              <input type="hidden" name="line_id" value={l.id} />
+                              <input type="hidden" name="budget_id" value={budget.id} />
+                              <button
+                                type="submit"
+                                className="rounded-lg border border-mf-border px-3 py-1.5 text-xs font-semibold text-mf-danger hover:bg-red-50"
+                              >
+                                Supprimer la ligne
+                              </button>
+                            </form>
+                          ) : (
+                            <p className="mt-2 text-xs text-slate-500">
+                              Suppression indisponible : cette ligne porte des engagements.
+                            </p>
+                          )}
+                        </details>
+                      </td>
+                    )}
                   </tr>
                 )
               })}
               {(lines ?? []).length === 0 && (
                 <tr>
-                  <td colSpan={4} className="py-4 text-center text-slate-400">
+                  <td colSpan={canEditLines ? 5 : 4} className="py-4 text-center text-slate-400">
                     Aucune ligne budgetaire.
                   </td>
                 </tr>

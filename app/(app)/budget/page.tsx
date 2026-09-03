@@ -8,6 +8,7 @@ import { StatusBadge } from '@/components/finance/status-badge'
 import { MetricCard } from '@/components/finance/metric-card'
 import { formatMoney } from '@/lib/format/money'
 import { createFiscalYearAction, createBudgetAction, createCostCenterAction } from '@/app/actions/budget'
+import { operationalBudgetTotals } from '@/lib/budget/operational-totals'
 
 export const metadata: Metadata = { title: 'Budget — MedFinder Gestion' }
 
@@ -29,14 +30,20 @@ export default async function BudgetPage() {
         .order('created_at', { ascending: false }),
       supabase.from('cost_centers').select('id, code, name'),
       supabase.from('departments').select('id, name').eq('status', 'active').order('name'),
-      supabase.from('budget_line_balances').select('planned_amount, committed_open, available_amount'),
+      supabase
+        .from('budget_line_balances')
+        .select('budget_id, planned_amount, committed_open, available_amount'),
     ])
 
   // Vue d'ensemble metier (regles UX) : "Budget consomme"/"Budget disponible",
-  // pas des noms de colonnes techniques.
-  const totalPlanned = (balances ?? []).reduce((sum, b) => sum + Number(b.planned_amount ?? 0), 0)
-  const totalAvailable = (balances ?? []).reduce((sum, b) => sum + Number(b.available_amount ?? 0), 0)
-  const totalConsumed = totalPlanned - totalAvailable
+  // pas des noms de colonnes techniques. Seuls les budgets OPERATIONNELS
+  // (approuves et revises) sont comptes — voir lib/budget/operational-totals.
+  const {
+    planned: totalPlanned,
+    available: totalAvailable,
+    consumed: totalConsumed,
+    draftPlanned,
+  } = operationalBudgetTotals(budgets, balances)
 
   return (
     <div className="space-y-6">
@@ -46,10 +53,24 @@ export default async function BudgetPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <MetricCard label="Budget planifie" value={formatMoney(totalPlanned)} />
+        <MetricCard
+          label="Budget planifie"
+          value={formatMoney(totalPlanned)}
+          hint="Budgets approuves et revises"
+        />
         <MetricCard label="Budget consomme" value={formatMoney(totalConsumed)} tone="warning" />
         <MetricCard label="Budget disponible" value={formatMoney(totalAvailable)} tone="success" />
       </div>
+
+      {/* Le montant des brouillons n'est pas cache : il est montre pour ce
+          qu'il est, un projet non arbitre, jamais melange aux totaux
+          operationnels. */}
+      {draftPlanned > 0 && (
+        <p className="text-xs text-slate-500">
+          {formatMoney(draftPlanned)} en brouillon, non compte dans les totaux ci-dessus tant que le
+          budget n&apos;est pas approuve.
+        </p>
+      )}
 
       <section className="space-y-3 rounded-2xl border border-mf-border bg-mf-surface p-6 shadow-sm">
         <h2 className="text-sm font-semibold text-mf-navy-900">Budgets</h2>
