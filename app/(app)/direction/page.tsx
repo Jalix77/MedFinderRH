@@ -5,6 +5,7 @@ import { hasPermission } from '@/lib/permissions'
 import { createClient } from '@/lib/supabase/server'
 import { MetricCard } from '@/components/finance/metric-card'
 import { formatMoney } from '@/lib/format/money'
+import { operationalBudgetTotals } from '@/lib/budget/operational-totals'
 
 export const metadata: Metadata = { title: 'Accueil — MedFinder Gestion' }
 
@@ -53,13 +54,21 @@ export default async function DirectionPage() {
     bankTotal = (bank ?? []).reduce((s, r) => s + Number(r.current_balance), 0)
   }
 
+  // Memes totaux que /budget, et par la MEME fonction : seuls les budgets
+  // approuves ou revises comptent. Un budget 'draft' n'est pas opposable
+  // aux depenses, l'afficher comme "disponible" annoncait une capacite de
+  // depense inexistante. La regle vit dans lib/budget/operational-totals
+  // et n'est pas reecrite ici.
   let budgetConsumed = 0
   let budgetAvailable = 0
   if (canViewBudget) {
-    const { data: balances } = await supabase.from('budget_line_balances').select('planned_amount, available_amount')
-    const planned = (balances ?? []).reduce((s, b) => s + Number(b.planned_amount ?? 0), 0)
-    budgetAvailable = (balances ?? []).reduce((s, b) => s + Number(b.available_amount ?? 0), 0)
-    budgetConsumed = planned - budgetAvailable
+    const [{ data: budgetRefs }, { data: balances }] = await Promise.all([
+      supabase.from('budgets').select('id, status'),
+      supabase.from('budget_line_balances').select('budget_id, planned_amount, available_amount'),
+    ])
+    const totals = operationalBudgetTotals(budgetRefs, balances)
+    budgetAvailable = totals.available
+    budgetConsumed = totals.consumed
   }
 
   let expensesThisMonth = 0

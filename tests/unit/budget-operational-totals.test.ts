@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import fs from 'node:fs'
+import path from 'node:path'
 import {
   operationalBudgetTotals,
   isOperationalBudgetStatus,
@@ -95,4 +97,40 @@ describe('operationalBudgetTotals', () => {
       draftPlanned: 0,
     })
   })
+})
+
+/**
+ * Garde-fou statique : les ecrans qui affichent des KPI budgetaires
+ * doivent REUTILISER operationalBudgetTotals, jamais recalculer la regle
+ * sur place.
+ *
+ * Le comportement de la fonction est deja couvert plus haut ; ce qui ne
+ * l'etait pas, c'est le fait qu'un ecran l'appelle reellement. /direction
+ * a longtemps additionne budget_line_balances directement, ce qui
+ * presentait un brouillon comme du budget disponible sans qu'aucun test
+ * ne puisse le voir : la regle etait correcte, l'appelant ne s'en servait
+ * pas.
+ */
+const ROOT = path.resolve(__dirname, '../..')
+
+const SCREENS_WITH_BUDGET_KPIS = [
+  'app/(app)/direction/page.tsx',
+  'app/(app)/budget/page.tsx',
+]
+
+describe('Ecrans a KPI budgetaires', () => {
+  for (const screen of SCREENS_WITH_BUDGET_KPIS) {
+    const source = fs.readFileSync(path.join(ROOT, screen), 'utf8')
+
+    it(`${screen} importe operationalBudgetTotals`, () => {
+      expect(source).toMatch(/operationalBudgetTotals/)
+      expect(source).toMatch(/@\/lib\/budget\/operational-totals/)
+    })
+
+    it(`${screen} ne recalcule pas le disponible ligne a ligne`, () => {
+      // Somme directe de available_amount = la regle de statut est
+      // court-circuitee, exactement le defaut corrige.
+      expect(source).not.toMatch(/reduce\([^)]*available_amount/)
+    })
+  }
 })
