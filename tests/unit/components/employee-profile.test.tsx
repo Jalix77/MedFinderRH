@@ -114,6 +114,11 @@ describe('fiche employe — gardes de permission', () => {
     expect(source).not.toMatch(/service_role|SERVICE_ROLE|createAdminClient/)
   })
 
+  it('nomme la sortie de l’employé sans annoncer une fin de contrat', () => {
+    expect(source).toContain('Marquer comme sorti')
+    expect(source).not.toContain('Mettre fin au contrat')
+  })
+
   /**
    * updateEmployeeAction lit `formData.get('gender') || null`. Un
    * formulaire de profil qui ne soumet pas le champ ecrase donc le genre

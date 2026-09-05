@@ -134,7 +134,7 @@ export default async function EmployeeDetailPage({ params }: PageProps) {
     </div>
   )
 
-  // Action secondaire volontairement discrete : terminer un contrat n'est
+  // Action secondaire volontairement discrete : marquer la sortie d'un employe n'est
   // pas l'action courante d'une fiche.
   const secondaryAction = canTerminate ? (
     <form action={employee.status === 'terminated' ? reactivateEmployeeAction : terminateEmployeeAction}>
@@ -143,7 +143,7 @@ export default async function EmployeeDetailPage({ params }: PageProps) {
         type="submit"
         className="rounded-lg px-3 py-2 text-sm font-medium text-slate-500 underline-offset-4 hover:text-mf-danger hover:underline"
       >
-        {employee.status === 'terminated' ? 'Reactiver' : 'Mettre fin au contrat'}
+        {employee.status === 'terminated' ? 'Réactiver' : 'Marquer comme sorti'}
       </button>
     </form>
   ) : undefined
