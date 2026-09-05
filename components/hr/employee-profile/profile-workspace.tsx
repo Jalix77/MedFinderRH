@@ -87,8 +87,12 @@ export function ProfileWorkspace({
         </div>
 
         <div className="px-5 pb-5 sm:px-8 sm:pb-6">
+          {/* Aucune marge negative ici : elle remontait TOUT le bloc
+              d'identite (nom, statut, matricule, poste, date) dans le
+              bandeau navy, ou `overflow-hidden` le rognait. Le
+              chevauchement appartient au seul avatar, cote page. */}
           <div className="flex flex-col gap-5 sm:flex-row sm:items-end sm:justify-between">
-            <div className="-mt-11 sm:-mt-14">{identity}</div>
+            {identity}
 
             {(canEdit || secondaryAction) && (
               <div className="flex flex-wrap items-center gap-2 sm:pb-1">

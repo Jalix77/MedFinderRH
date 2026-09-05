@@ -98,9 +98,17 @@ export default async function EmployeeDetailPage({ params }: PageProps) {
   // --- Bandeau ------------------------------------------------------------
 
   const identity = (
-    <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-5">
-      <Avatar firstName={employee.first_name} lastName={employee.last_name} />
-      <div className="min-w-0 sm:pb-1">
+    // Rangee a tous les points de rupture, et alignee en haut : seul
+    // l'avatar remonte dans le bandeau. En colonne, une marge negative sur
+    // le premier enfant entraine tous ses freres avec lui — le texte
+    // repartirait sur le navy. Ici le decalage reste local a l'avatar.
+    <div className="flex items-start gap-4 sm:gap-5">
+      <Avatar
+        firstName={employee.first_name}
+        lastName={employee.last_name}
+        className="-mt-10 sm:-mt-11"
+      />
+      <div className="min-w-0 pt-3">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <h1 className="text-2xl font-bold tracking-tight text-mf-navy-900">
             {employee.first_name} {employee.last_name}

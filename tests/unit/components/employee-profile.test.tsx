@@ -4,6 +4,7 @@ import { render, screen } from '@testing-library/react'
 import fs from 'node:fs'
 import path from 'node:path'
 import {
+  Avatar,
   initials,
   statusLabel,
   statusTone,
@@ -124,6 +125,42 @@ describe('fiche employe — gardes de permission', () => {
     const form = source.slice(start, source.indexOf('</form>', start))
     expect(form).toMatch(/name="gender"/)
     expect(form).toMatch(/value=\{employee\.gender \?\? ''\}/)
+  })
+})
+
+/**
+ * Le bandeau du hero est `overflow-hidden`. Toute marge negative posee sur
+ * le bloc d'identite complet y fait disparaitre le nom, le badge de statut
+ * et le matricule — defaut observe en production. Le chevauchement doit
+ * porter sur l'avatar seul.
+ */
+describe('hero — chevauchement du bandeau', () => {
+  const ROOT = path.resolve(__dirname, '../../..')
+  const workspace = fs.readFileSync(
+    path.join(ROOT, 'components/hr/employee-profile/profile-workspace.tsx'),
+    'utf8'
+  )
+  const page = fs.readFileSync(path.join(ROOT, 'app/(app)/rh/employes/[id]/page.tsx'), 'utf8')
+
+  it('ne remonte pas le bloc identity dans le bandeau', () => {
+    const start = workspace.indexOf('{identity}')
+    expect(start).toBeGreaterThan(-1)
+    // La balise ouvrante qui precede immediatement {identity} ne doit
+    // porter aucune marge negative verticale.
+    const enclosing = workspace.slice(workspace.lastIndexOf('<div', start), start)
+    expect(enclosing).not.toMatch(/-mt-\d/)
+  })
+
+  it("applique le decalage a l'avatar, et a lui seul", () => {
+    expect(page).toMatch(/<Avatar[\s\S]*?className="-mt-\d+ sm:-mt-\d+"[\s\S]*?\/>/)
+  })
+
+  it('laisse Avatar recevoir une classe de positionnement', () => {
+    const { container } = render(<Avatar firstName="Jean" lastName="Pierre" className="-mt-10" />)
+    const node = container.firstElementChild as HTMLElement
+    expect(node.className).toContain('-mt-10')
+    // La classe de position ne remplace pas l'apparence de base.
+    expect(node.className).toContain('rounded-full')
   })
 })
 

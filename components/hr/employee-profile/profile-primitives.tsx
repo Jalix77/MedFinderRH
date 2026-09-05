@@ -15,11 +15,24 @@ export function initials(firstName: string, lastName: string): string {
   return `${first}${last}`.toUpperCase() || '?'
 }
 
-export function Avatar({ firstName, lastName }: { firstName: string; lastName: string }) {
+/**
+ * `className` sert au positionnement (le chevauchement du bandeau), jamais
+ * a l'apparence : la marge negative doit porter sur l'avatar seul, pas sur
+ * le bloc d'identite qui l'entoure.
+ */
+export function Avatar({
+  firstName,
+  lastName,
+  className = '',
+}: {
+  firstName: string
+  lastName: string
+  className?: string
+}) {
   return (
     <div
       aria-hidden
-      className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-mf-navy-900 text-2xl font-semibold tracking-wide text-white shadow-sm ring-4 ring-white sm:h-24 sm:w-24 sm:text-3xl"
+      className={`flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-mf-navy-900 text-2xl font-semibold tracking-wide text-white shadow-sm ring-4 ring-white sm:h-24 sm:w-24 sm:text-3xl ${className}`}
     >
       {initials(firstName, lastName)}
     </div>
