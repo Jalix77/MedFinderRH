@@ -1,0 +1,80 @@
+/* Roles semantiques du stash prototype-ui-apercu-direction, integres aux
+   tokens MedFinder. Une seule palette applicative ; aucune variable --p-*.
+   Le perimetre authentifie protege les pages publiques de ces adaptations. */
+[data-mf-app] {
+  color-scheme: light;
+  --mf-nested: #fcfcfd;
+  --mf-border-soft: color-mix(in srgb, var(--mf-border) 60%, transparent);
+  --mf-hover: #f7f8f9;
+  --mf-active: #f2f4f6;
+  --mf-text: var(--mf-navy-950);
+  --mf-text-2: #3f4a57;
+  --mf-text-3: #4b5563;
+  --mf-text-4: #5b6673;
+  --mf-text-5: #6b7280;
+  --mf-text-6: #7c8794;
+  --mf-text-7: #8b95a1;
+  --mf-text-8: #9aa3ad;
+  --mf-neutral-1: #2b3440;
+  --mf-neutral-2: #8b95a1;
+  --mf-neutral-3: #c9cfd6;
+  --mf-accent: var(--mf-emerald-700);
+}
+
+:root[data-mf-theme="dark"] [data-mf-app] {
+  color-scheme: dark;
+  --background: #0e131a;
+  --foreground: #e9edf2;
+  --mf-surface: #161d26;
+  --mf-nested: #1b232d;
+  --mf-border: #263039;
+  --mf-border-soft: #1f2831;
+  --mf-hover: #1d2630;
+  --mf-active: #232d38;
+  --mf-text: var(--foreground);
+  --mf-text-2: #c8d0da;
+  --mf-text-3: #bcc6d2;
+  --mf-text-4: #aeb9c6;
+  --mf-text-5: #a1adbb;
+  --mf-text-6: #95a1b0;
+  --mf-text-7: #8894a3;
+  --mf-text-8: #7d8998;
+  --mf-neutral-1: #cfd6de;
+  --mf-neutral-2: #7b8898;
+  --mf-neutral-3: #3a4552;
+  --mf-danger: #f87171;
+  --mf-accent: var(--mf-emerald-500);
+  --mf-emerald-50: color-mix(in srgb, var(--mf-accent) 10%, var(--mf-surface));
+}
+
+[data-mf-app] .mf-accent-bg { background-color: var(--mf-accent); }
+[data-mf-app] :focus-visible { outline: 2px solid var(--mf-accent); outline-offset: 2px; }
+
+/* Adaptateur des utilitaires deja utilises par les ecrans existants.
+   Les couleurs de FOND des boutons marine/emeraude restent les couleurs
+   de marque, distinctes des couleurs de TEXTE lisibles en mode sombre.
+   Les utilitaires variants (hover, placeholder) gardent leurs conditions. */
+:root[data-mf-theme="dark"] [data-mf-app] {
+  & :is(.text-mf-navy-950, .text-mf-navy-900, .text-mf-navy-800, .text-mf-navy-700) { color: var(--mf-text); }
+  & .text-slate-300 { color: var(--mf-text-7); }
+  & .text-slate-400 { color: var(--mf-text-6); }
+  & .text-slate-500 { color: var(--mf-text-5); }
+  & .text-slate-600 { color: var(--mf-text-3); }
+  & :is(.text-slate-700, .text-slate-800, .text-slate-900) { color: var(--mf-text); }
+  & :is(.text-mf-emerald-500, .text-mf-emerald-600, .text-mf-emerald-700) { color: var(--mf-accent); }
+  & .bg-white { background-color: var(--mf-surface); }
+  & .bg-slate-50 { background-color: var(--mf-nested); }
+  & .bg-slate-100 { background-color: var(--mf-active); }
+  & [data-direction-dashboard] [class~="bg-background/40"] { background-color: var(--mf-nested); }
+  & [data-direction-dashboard] .bg-mf-navy-800 { background-color: var(--mf-neutral-1); }
+  & [data-direction-dashboard] [class~="bg-mf-navy-700/45"] { background-color: var(--mf-neutral-2); }
+  & [data-direction-dashboard] [class~="bg-mf-navy-700/20"] { background-color: var(--mf-neutral-3); }
+  & [data-direction-dashboard] .bg-mf-emerald-600 { background-color: var(--mf-accent); }
+  & [class~="hover:bg-slate-50"]:hover { background-color: var(--mf-hover); }
+  & [class~="hover:bg-mf-navy-900/5"]:hover { background-color: var(--mf-hover); }
+  & [class~="placeholder:text-slate-400"]::placeholder { color: var(--mf-text-6); }
+  & :is(.bg-amber-50, .bg-amber-100) { background-color: color-mix(in srgb, var(--color-amber-400) 10%, var(--mf-surface)); }
+  & :is(.text-amber-600, .text-amber-700, .text-amber-800, .text-amber-900) { color: var(--color-amber-300); }
+  & :is(.border-amber-200, .border-amber-300) { border-color: color-mix(in srgb, var(--color-amber-400) 40%, var(--mf-border)); }
+  & .bg-red-50 { background-color: color-mix(in srgb, var(--mf-danger) 10%, var(--mf-surface)); }
+}

@@ -1,4 +1,6 @@
 @import "tailwindcss";
+@import "../components/shell/navigation.css";
+@import "./theme.css";
 
 :root {
   --background: #f6f8fa;

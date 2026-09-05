@@ -1,0 +1,28 @@
+[data-mf-app] .mf-nav-item{
+  transition: background-color 140ms ease;
+}
+[data-mf-app] .mf-nav-label{
+  display:inline-block;
+  color: color-mix(in srgb, var(--mf-accent) calc(var(--effect, 0) * 100%), currentColor);
+  transform: translateX(calc(var(--effect, 0) * var(--mf-nav-shift, 9px)));
+}
+[data-mf-app] .mf-nav-marker{
+  position:absolute;
+  left:0.875rem;
+  top:50%;
+  height:1px;
+  width: var(--mf-nav-marker, 22px);
+  background-color: color-mix(in srgb, var(--mf-accent) calc(var(--effect, 0) * 100%), var(--mf-neutral-3));
+  opacity: calc(0.35 + var(--effect, 0) * 0.65);
+  transform-origin:left center;
+  transform: translateY(-50%) scaleX(calc(0.7 + var(--effect, 0) * 0.5));
+}
+
+/* Mouvement neutralise : plus aucun deplacement ni mise a l'echelle. La
+   boucle rAF est deja coupee cote composant ; ces regles garantissent le
+   resultat meme si un --effect residuel subsiste. */
+@media (prefers-reduced-motion: reduce){
+  [data-mf-app] .mf-nav-item{ transition:none; }
+  [data-mf-app] .mf-nav-label{ transform:none; }
+  [data-mf-app] .mf-nav-marker{ transform:translateY(-50%); }
+}
