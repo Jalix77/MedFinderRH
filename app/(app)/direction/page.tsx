@@ -6,6 +6,8 @@ import { createClient } from '@/lib/supabase/server'
 import { MetricCard } from '@/components/finance/metric-card'
 import { formatMoney } from '@/lib/format/money'
 import { operationalBudgetTotals } from '@/lib/budget/operational-totals'
+import { countExpensesWithoutReceipt } from '@/lib/expenses/missing-receipts'
+import { businessMonthToDate } from '@/lib/date/business-month'
 
 export const metadata: Metadata = { title: 'Accueil — MedFinder Gestion' }
 
@@ -21,17 +23,22 @@ export default async function DirectionPage() {
     .eq('organization_id', activeOrgId!)
     .eq('status', 'active')
 
-  const [canViewAudit, canViewTreasury, canViewBudget, canViewExpenses, canViewPapej] = activeOrgId
-    ? await Promise.all([
-        hasPermission(activeOrgId, 'audit.view'),
-        hasPermission(activeOrgId, 'accounting.view').then(
-          async (v) => v || (await hasPermission(activeOrgId, 'treasury.manage'))
-        ),
-        hasPermission(activeOrgId, 'budget.view'),
-        hasPermission(activeOrgId, 'expense.view'),
-        hasPermission(activeOrgId, 'papej.view'),
-      ])
-    : [false, false, false, false, false]
+  // `accounting.view` est desormais lue pour elle-meme : les charges du mois
+  // sont un indicateur COMPTABLE, pas un indicateur du module depenses.
+  const [canViewAudit, canViewAccounting, canManageTreasury, canViewBudget, canViewExpenses, canViewPapej] =
+    activeOrgId
+      ? await Promise.all([
+          hasPermission(activeOrgId, 'audit.view'),
+          hasPermission(activeOrgId, 'accounting.view'),
+          hasPermission(activeOrgId, 'treasury.manage'),
+          hasPermission(activeOrgId, 'budget.view'),
+          hasPermission(activeOrgId, 'expense.view'),
+          hasPermission(activeOrgId, 'papej.view'),
+        ])
+      : [false, false, false, false, false, false]
+
+  // Regle de visibilite de la tresorerie inchangee.
+  const canViewTreasury = canViewAccounting || canManageTreasury
 
   // --- Tresorerie : libelles metier avant tout, jamais de valeur fictive
   // (§ regles UX et dashboard, Phase 1C-UI) — chaque section n'interroge la
@@ -71,26 +78,53 @@ export default async function DirectionPage() {
     budgetConsumed = totals.consumed
   }
 
-  let expensesThisMonth = 0
+  // Charges du mois : le grand livre, jamais le module depenses.
+  //
+  // Additionner les expense_requests laissait de cote toute charge
+  // comptabilisee directement au journal (ecritures manuelles notamment),
+  // et ignorait les contre-passations. On reutilise donc la source
+  // canonique deja en place, generate_income_statement_report, qui ne
+  // retient que les ecritures 'posted' sur des comptes de charge, applique
+  // l'isolation organisationnelle et exige accounting.view. Elle n'est
+  // appelee que sous la session de l'utilisateur : aucun contournement.
+  //
+  // Les expense_requests ne sont surtout PAS additionnees en plus : une
+  // depense payee est deja une ecriture au grand livre, la compter deux
+  // fois doublerait le montant.
+  let ledgerExpensesThisMonth = 0
+  if (canViewAccounting && activeOrgId) {
+    // Mois METIER : celui de Port-au-Prince, jamais le fuseau implicite du
+    // processus Node/Vercel — voir lib/date/business-month.
+    const { start, end } = businessMonthToDate(new Date())
+    const { data } = await supabase.rpc('generate_income_statement_report', {
+      p_org_id: activeOrgId,
+      p_period_start: start,
+      p_period_end: end,
+      p_cost_center_id: undefined,
+    })
+    const result = data as { success?: boolean; total_expense?: number | string } | null
+    if (result?.success) ledgerExpensesThisMonth = Number(result.total_expense ?? 0)
+  }
+
   let expensesPending = 0
   let missingJustifications = 0
   if (canViewExpenses) {
-    const monthStart = new Date()
-    monthStart.setDate(1)
-    const monthStartStr = monthStart.toISOString().slice(0, 10)
-
-    const [{ data: monthRows }, { count: pendingCount }, { count: missingCount }] = await Promise.all([
-      supabase
-        .from('expense_requests')
-        .select('amount')
-        .gte('requested_date', monthStartStr)
-        .not('status', 'in', '(draft,cancelled,rejected)'),
+    const [{ count: pendingCount }, { data: paidExpenses }] = await Promise.all([
       supabase.from('expense_requests').select('id', { count: 'exact', head: true }).eq('status', 'submitted'),
-      supabase.from('expense_requests').select('id', { count: 'exact', head: true }).eq('status', 'paid'),
+      supabase.from('expense_requests').select('id').eq('status', 'paid'),
     ])
-    expensesThisMonth = (monthRows ?? []).reduce((s, r) => s + Number(r.amount), 0)
     expensesPending = pendingCount ?? 0
-    missingJustifications = missingCount ?? 0
+
+    // Une depense payee n'est "sans justificatif" que si AUCUNE piece n'y
+    // est rattachee — meme seuil que justify_expense_request. La regle vit
+    // dans lib/expenses/missing-receipts.
+    if ((paidExpenses ?? []).length > 0) {
+      const { data: attachments } = await supabase
+        .from('expense_attachments')
+        .select('expense_request_id')
+        .in('expense_request_id', (paidExpenses ?? []).map((e) => e.id))
+      missingJustifications = countExpensesWithoutReceipt(paidExpenses, attachments)
+    }
   }
 
   let papejGranted = 0
@@ -121,7 +155,8 @@ export default async function DirectionPage() {
   }
   const papejPaid = papejReceived - papejAvailable - papejCommitted > 0 ? papejReceived - papejAvailable - papejCommitted : 0
 
-  const hasAnyFinancialWidget = canViewTreasury || canViewBudget || canViewExpenses || canViewPapej
+  const hasAnyFinancialWidget =
+    canViewTreasury || canViewBudget || canViewExpenses || canViewPapej || canViewAccounting
 
   return (
     <div className="space-y-6">
@@ -153,13 +188,19 @@ export default async function DirectionPage() {
         </div>
       )}
 
-      {(canViewExpenses || canViewBudget) && (
+      {(canViewExpenses || canViewBudget || canViewAccounting) && (
         <div className="space-y-3">
           <h2 className="text-sm font-semibold text-mf-navy-900">Depenses et budget</h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {canViewAccounting && (
+              <MetricCard
+                label="Charges comptabilisees du mois"
+                value={formatMoney(ledgerExpensesThisMonth)}
+                hint="Ecritures comptabilisees — pas un decaissement de tresorerie"
+              />
+            )}
             {canViewExpenses && (
               <>
-                <MetricCard label="Depenses du mois" value={formatMoney(expensesThisMonth)} />
                 <MetricCard label="Depenses a approuver" value={String(expensesPending)} tone={expensesPending > 0 ? 'warning' : 'default'} />
                 <MetricCard
                   label="Justificatifs manquants"
