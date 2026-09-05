@@ -3,8 +3,7 @@ import { getMemberships } from '@/lib/auth/dal'
 import { getActiveOrganizationId } from '@/lib/auth/active-org'
 import { hasPermission } from '@/lib/permissions'
 import { createClient } from '@/lib/supabase/server'
-import { MetricCard } from '@/components/finance/metric-card'
-import { formatMoney } from '@/lib/format/money'
+import { DirectionDashboard } from '@/components/direction/direction-dashboard'
 import { operationalBudgetTotals } from '@/lib/budget/operational-totals'
 import { countExpensesWithoutReceipt } from '@/lib/expenses/missing-receipts'
 import { businessMonthToDate } from '@/lib/date/business-month'
@@ -159,95 +158,31 @@ export default async function DirectionPage() {
     canViewTreasury || canViewBudget || canViewExpenses || canViewPapej || canViewAccounting
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-xl font-bold text-mf-navy-900">
-          Bienvenue{active ? ` — ${active.organization_name}` : ''}
-        </h1>
-        <p className="text-sm text-slate-500">
-          Organisation, acces, roles, audit, RH, depenses, tresorerie, budget et PAPEJ.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <MetricCard label="Membres actifs" value={String(memberCount ?? 0)} />
-        <MetricCard label="Vos roles" value={active?.role_codes.join(', ') || 'Aucun'} />
-        <MetricCard label="Organisations accessibles" value={String(memberships.length)} />
-      </div>
-
-      {canViewTreasury && (
-        <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-mf-navy-900">Tresorerie</h2>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {[...(treasuryTotalsByCurrency?.entries() ?? [])].map(([currency, total]) => (
-              <MetricCard key={currency} label={`Tresorerie totale (${currency})`} value={formatMoney(total, currency)} />
-            ))}
-            <MetricCard label="Solde caisse" value={formatMoney(cashTotal)} />
-            <MetricCard label="Solde banque" value={formatMoney(bankTotal)} />
-          </div>
-        </div>
-      )}
-
-      {(canViewExpenses || canViewBudget || canViewAccounting) && (
-        <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-mf-navy-900">Depenses et budget</h2>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            {canViewAccounting && (
-              <MetricCard
-                label="Charges comptabilisees du mois"
-                value={formatMoney(ledgerExpensesThisMonth)}
-                hint="Ecritures comptabilisees — pas un decaissement de tresorerie"
-              />
-            )}
-            {canViewExpenses && (
-              <>
-                <MetricCard label="Depenses a approuver" value={String(expensesPending)} tone={expensesPending > 0 ? 'warning' : 'default'} />
-                <MetricCard
-                  label="Justificatifs manquants"
-                  value={String(missingJustifications)}
-                  tone={missingJustifications > 0 ? 'danger' : 'default'}
-                />
-              </>
-            )}
-            {canViewBudget && (
-              <>
-                <MetricCard label="Budget consomme" value={formatMoney(budgetConsumed)} tone="warning" />
-                <MetricCard label="Budget disponible" value={formatMoney(budgetAvailable)} tone="success" />
-              </>
-            )}
-          </div>
-        </div>
-      )}
-
-      {canViewPapej && (
-        <div className="space-y-3">
-          <h2 className="text-sm font-semibold text-mf-navy-900">PAPEJ</h2>
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-            <MetricCard label="PAPEJ accorde" value={formatMoney(papejGranted)} />
-            <MetricCard label="PAPEJ recu" value={formatMoney(papejReceived)} tone="success" />
-            <MetricCard label="PAPEJ engage" value={formatMoney(papejCommitted)} tone="warning" />
-            <MetricCard label="PAPEJ paye" value={formatMoney(papejPaid)} />
-            <MetricCard label="Solde PAPEJ" value={formatMoney(papejAvailable)} tone="success" />
-          </div>
-        </div>
-      )}
-
-      {!hasAnyFinancialWidget && (
-        <div className="rounded-2xl border border-mf-border bg-mf-surface p-6 shadow-sm">
-          <h2 className="mb-3 text-sm font-semibold text-mf-navy-900">Modules disponibles</h2>
-          <p className="text-sm text-slate-500">
-            Les indicateurs financiers (tresorerie, budget, depenses, PAPEJ) sont visibles depuis le
-            menu pour les roles disposant des permissions correspondantes.
-          </p>
-        </div>
-      )}
-
-      {!canViewAudit && (
-        <p className="text-xs text-slate-400">
-          Le journal d&apos;audit est visible depuis le menu pour les roles disposant de la
-          permission <code>audit.view</code>.
-        </p>
-      )}
-    </div>
+    <DirectionDashboard
+      organizationName={active?.organization_name}
+      roleCodes={active?.role_codes ?? []}
+      memberCount={memberCount ?? 0}
+      organizationCount={memberships.length}
+      canViewAudit={canViewAudit}
+      canViewAccounting={canViewAccounting}
+      canViewTreasury={canViewTreasury}
+      canViewBudget={canViewBudget}
+      canViewExpenses={canViewExpenses}
+      canViewPapej={canViewPapej}
+      hasAnyFinancialWidget={hasAnyFinancialWidget}
+      treasuryTotalsByCurrency={[...(treasuryTotalsByCurrency?.entries() ?? [])]}
+      cashTotal={cashTotal}
+      bankTotal={bankTotal}
+      budgetConsumed={budgetConsumed}
+      budgetAvailable={budgetAvailable}
+      ledgerExpensesThisMonth={ledgerExpensesThisMonth}
+      expensesPending={expensesPending}
+      missingJustifications={missingJustifications}
+      papejGranted={papejGranted}
+      papejReceived={papejReceived}
+      papejCommitted={papejCommitted}
+      papejPaid={papejPaid}
+      papejAvailable={papejAvailable}
+    />
   )
 }
