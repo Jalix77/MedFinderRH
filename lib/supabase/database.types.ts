@@ -2986,6 +2986,7 @@ export type Database = {
           manager_employee_id: string | null
           matricule: string
           organization_id: string
+          photo_storage_path: string | null
           photo_url: string | null
           position_id: string | null
           status: string
@@ -3005,6 +3006,7 @@ export type Database = {
           manager_employee_id?: string | null
           matricule: string
           organization_id: string
+          photo_storage_path?: string | null
           photo_url?: string | null
           position_id?: string | null
           status?: string
@@ -3024,6 +3026,7 @@ export type Database = {
           manager_employee_id?: string | null
           matricule?: string
           organization_id?: string
+          photo_storage_path?: string | null
           photo_url?: string | null
           position_id?: string | null
           status?: string

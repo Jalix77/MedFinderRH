@@ -14,6 +14,8 @@ import {
   createContractAmendmentAction,
 } from '@/app/actions/hr'
 import { DocumentUpload } from '@/components/hr/document-upload'
+import { PhotoControls } from '@/components/hr/employee-profile/photo-controls'
+import { getEmployeePhotoSignedUrl } from '@/lib/storage/employee-photo-url'
 import { DocumentDownloadLink } from '@/components/hr/document-download-link'
 import { ProfileWorkspace, type ProfilePanel } from '@/components/hr/employee-profile/profile-workspace'
 import {
@@ -47,15 +49,18 @@ export default async function EmployeeDetailPage({ params }: PageProps) {
   const { data: employee } = await supabase
     .from('employees')
     .select(
-      'id, matricule, first_name, last_name, gender, hire_date, status, user_id, department_id, position_id, departments ( name ), positions ( title )'
+      'id, matricule, first_name, last_name, gender, hire_date, status, user_id, photo_storage_path, department_id, position_id, departments ( name ), positions ( title )'
     )
     .eq('id', id)
+    .eq('organization_id', orgId)
     .maybeSingle()
 
   if (!employee) return <AccessDenied />
 
   const isSelf = employee.user_id === userId
   if (!canView && !isSelf) return <AccessDenied />
+
+  const photoUrl = await getEmployeePhotoSignedUrl(supabase, orgId, id, employee.photo_storage_path)
 
   const [canUpdate, canTerminate, canViewSensitive, canViewSalary, canManageContracts, canUploadDocs] =
     await Promise.all([
@@ -106,7 +111,8 @@ export default async function EmployeeDetailPage({ params }: PageProps) {
       <Avatar
         firstName={employee.first_name}
         lastName={employee.last_name}
-        className="-mt-10 sm:-mt-11"
+        photoUrl={photoUrl}
+        className="-mt-8"
       />
       <div className="min-w-0 pt-3">
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
@@ -123,6 +129,7 @@ export default async function EmployeeDetailPage({ params }: PageProps) {
           {departmentName ?? 'Sans departement'}
         </p>
         <p className="mt-0.5 text-xs text-slate-400">Entre le {formatDay(employee.hire_date)}</p>
+        {canUpdate && <PhotoControls employeeId={employee.id} hasPhoto={Boolean(employee.photo_storage_path)} />}
       </div>
     </div>
   )

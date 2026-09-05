@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import fs from 'node:fs'
 import path from 'node:path'
 import {
@@ -152,15 +152,30 @@ describe('hero — chevauchement du bandeau', () => {
   })
 
   it("applique le decalage a l'avatar, et a lui seul", () => {
-    expect(page).toMatch(/<Avatar[\s\S]*?className="-mt-\d+ sm:-mt-\d+"[\s\S]*?\/>/)
+    expect(page).toMatch(/<Avatar[\s\S]*?className="-mt-8"[\s\S]*?\/>/)
+    expect(workspace).toContain('isolate overflow-hidden')
+    expect(workspace).toContain('relative z-0 h-24 sm:h-28')
   })
 
   it('laisse Avatar recevoir une classe de positionnement', () => {
-    const { container } = render(<Avatar firstName="Jean" lastName="Pierre" className="-mt-10" />)
+    const { container } = render(<Avatar firstName="Jean" lastName="Pierre" className="-mt-8" />)
     const node = container.firstElementChild as HTMLElement
-    expect(node.className).toContain('-mt-10')
+    expect(node.className).toContain('-mt-8')
+    expect(node).toHaveClass('relative', 'z-10', 'ring-4', 'ring-white')
+    expect(screen.getByText('JP')).toBeInTheDocument()
     // La classe de position ne remplace pas l'apparence de base.
     expect(node.className).toContain('rounded-full')
+  })
+
+  it('photo circulaire accessible, dimensions stables, sans cache optimiseur', () => {
+    render(<Avatar firstName="Jean" lastName="Pierre" photoUrl="https://private.test/photo?token=ephemere" />)
+    const image = screen.getByRole('img', { name: 'Jean Pierre' })
+    expect(image).toHaveClass('rounded-full', 'object-cover', 'object-center')
+    expect(image).toHaveAttribute('width', '96')
+    expect(image).toHaveAttribute('src', 'https://private.test/photo?token=ephemere')
+    fireEvent.error(image)
+    expect(screen.queryByRole('img')).not.toBeInTheDocument()
+    expect(screen.getByText('JP')).toBeInTheDocument()
   })
 })
 

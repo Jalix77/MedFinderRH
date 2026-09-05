@@ -68,12 +68,12 @@ export function ProfileWorkspace({
   return (
     <div className="space-y-6">
       {/* --- Bandeau profil ------------------------------------------- */}
-      <div className="overflow-hidden rounded-2xl border border-mf-border bg-mf-surface shadow-sm">
+      <div className="isolate overflow-hidden rounded-2xl border border-mf-border bg-mf-surface shadow-sm">
         {/* Decor abstrait, sans image externe : un degrade navy et deux
             voiles tres faibles. Rien qui attire l'oeil avant le nom. */}
         <div
           aria-hidden
-          className="relative h-24 sm:h-28"
+          className="relative z-0 h-24 sm:h-28"
           style={{
             backgroundImage: `linear-gradient(105deg, var(--mf-navy-950), var(--mf-navy-800) 58%, var(--mf-navy-700))`,
           }}

@@ -8,36 +8,7 @@ import type { ReactNode } from 'react'
  * exclusivement des tokens mf-* existants.
  */
 
-/** Initiales de l'employe, jamais plus de deux lettres. */
-export function initials(firstName: string, lastName: string): string {
-  const first = firstName.trim().charAt(0)
-  const last = lastName.trim().charAt(0)
-  return `${first}${last}`.toUpperCase() || '?'
-}
-
-/**
- * `className` sert au positionnement (le chevauchement du bandeau), jamais
- * a l'apparence : la marge negative doit porter sur l'avatar seul, pas sur
- * le bloc d'identite qui l'entoure.
- */
-export function Avatar({
-  firstName,
-  lastName,
-  className = '',
-}: {
-  firstName: string
-  lastName: string
-  className?: string
-}) {
-  return (
-    <div
-      aria-hidden
-      className={`flex h-20 w-20 shrink-0 items-center justify-center rounded-full bg-mf-navy-900 text-2xl font-semibold tracking-wide text-white shadow-sm ring-4 ring-white sm:h-24 sm:w-24 sm:text-3xl ${className}`}
-    >
-      {initials(firstName, lastName)}
-    </div>
-  )
-}
+export { Avatar, initials } from './avatar'
 
 const EMPLOYEE_STATUS_LABELS: Record<string, string> = {
   active: 'Actif',
