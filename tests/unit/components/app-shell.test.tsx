@@ -11,6 +11,8 @@ import { DARK_MODE_QUERY } from '@/lib/theme/appearance'
 const state = vi.hoisted(() => ({ pathname: '/direction', logout: vi.fn<(formData: FormData) => Promise<void>>(async () => {}) }))
 vi.mock('next/navigation', () => ({ usePathname: () => state.pathname }))
 vi.mock('@/app/actions/auth', () => ({ logoutAction: state.logout }))
+// The independent specular-engine suite owns WebGL lifecycle and scheduling.
+vi.mock('@/components/specular/engine', () => ({ mountSpecular: () => () => {} }))
 
 const queries = new Map<string, { matches: boolean; listeners: Set<() => void> }>()
 const frames = new Map<number, FrameRequestCallback>()

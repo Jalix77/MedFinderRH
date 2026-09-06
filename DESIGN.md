@@ -80,3 +80,31 @@ n'existe. Un script synchrone dans le head pose `data-mf-theme` avant affichage 
 le mode Système suit ensuite l'OS. Stockage refusé : fonctionnement en mémoire.
 Aucune requête, variable d'environnement, préférence serveur ou authentification
 n'est concernée. Les pages publiques restent hors de la portée des styles sombres.
+
+## Reflet Specular — premier lot opt-in
+
+Le moteur unique de `components/specular/` reprend le shader GLSL inchangé de
+React Bits SpecularButton (David Haz, révision
+`2a1d51e50f560124961d9c223507c5d201837ae2`). Sa licence accompagne le shader.
+Le provider du shell authentifié charge OGL au premier hover/proximité ou focus
+clavier éligible. Un seul canvas transparent suit la surface active ; aucun
+fond, rôle, tabIndex, lien, action ou calcul métier n'est changé.
+
+- Opt-in : `data-specular` ; rayon CSS réel, surcharge `data-specular-radius`,
+  défaut 12 px. Les cartes imbriquées survolées précèdent leur panneau parent.
+- Cibles : KPI et panneaux Direction, lien Journal d'audit, boutons primaires
+  standards d'ActionForm et Enregistrer du formulaire Tiers. Aucun input, badge,
+  ligne de tableau, texte ou lien de sidebar n'est équipé.
+- Shader : rounded-rectangle SDF, angle/proximité et lissage React Bits,
+  shineSize 10°, shineFade 40°, thickness 1 px, proximité 160 px, marge 20 px.
+- Couleurs : `--mf-specular-line` dérive de background en clair et foreground
+  en sombre ; base depuis `--mf-border`. Intensité 0,55 en clair, 0,85 en sombre.
+  Ces alias sont définis dans `components/specular/specular.css` et importés par
+  globals.css. Aucune palette indépendante ni modification du fond des cartes.
+- Un listener pointermove passif pour ce moteur, un seul rAF en attente,
+  aucun setState par frame. Arrêt une fois stabilisé ou hors proximité.
+  Recalcul après scroll, resize, thème ou changement des surfaces.
+- Tactile : aucun chargement pour le toucher seul. Mouvement réduit ou couleurs
+  forcées : pas de WebGL ; les bordures et focus existants restent disponibles.
+  Overlay aria-hidden, sans pointer events, contenu dans le viewport ; nettoyage
+  des listeners, observers, rAF, buffers/programme et contexte au démontage.

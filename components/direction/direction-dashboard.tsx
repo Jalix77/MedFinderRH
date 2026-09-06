@@ -55,7 +55,7 @@ export function DirectionDashboard({
           </p>
         </div>
         {canViewAudit && (
-          <Link href="/audit" className="inline-flex shrink-0 items-center rounded-lg border border-mf-border bg-mf-surface px-4 py-2.5 text-sm font-medium text-mf-navy-900 transition-colors hover:bg-mf-navy-900/5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-mf-emerald-600">
+          <Link data-specular href="/audit" className="inline-flex shrink-0 items-center rounded-lg border border-mf-border bg-mf-surface px-4 py-2.5 text-sm font-medium text-mf-navy-900 transition-colors hover:bg-mf-navy-900/5 focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-mf-emerald-600">
             Journal d&apos;audit
           </Link>
         )}

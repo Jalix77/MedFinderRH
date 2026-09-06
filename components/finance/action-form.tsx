@@ -87,7 +87,7 @@ export function ActionForm({
         <input key={name} type="hidden" name={name} value={value} />
       ))}
       {children}
-      <button type="submit" disabled={pending} className={buttonClassName ?? defaultButtonClass} >
+      <button data-specular={buttonClassName == null || buttonClassName === defaultButtonClass ? true : undefined} type="submit" disabled={pending} className={buttonClassName ?? defaultButtonClass} >
         {pending ? (pendingLabel ?? 'Envoi...') : submitLabel}
       </button>
       {error && <p className="mt-2 text-sm text-mf-danger">{error}</p>}

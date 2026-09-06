@@ -122,7 +122,7 @@ export function ThirdPartyForm({
 
       {error && <p role="alert" className="rounded-lg bg-red-50 px-3 py-2 text-sm text-mf-danger">{error}</p>}
 
-      <button type="submit" disabled={pending}
+      <button data-specular type="submit" disabled={pending}
         className="rounded-lg bg-mf-navy-900 px-4 py-2 text-sm font-semibold text-white hover:bg-mf-navy-800 disabled:opacity-60">
         {pending ? 'Enregistrement…' : submitLabel}
       </button>

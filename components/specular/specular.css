@@ -1,0 +1,26 @@
+[data-mf-app] {
+  --mf-specular-line: var(--background);
+  --mf-specular-intensity: 0.55;
+}
+:root[data-mf-theme="dark"] [data-mf-app] {
+  --mf-specular-line: var(--foreground);
+  --mf-specular-intensity: 0.85;
+}
+.mf-specular-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  overflow: hidden;
+  pointer-events: none;
+  contain: strict;
+}
+.mf-specular-overlay canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+@media (prefers-reduced-motion: reduce), (forced-colors: active) {
+  .mf-specular-overlay { display: none; }
+}

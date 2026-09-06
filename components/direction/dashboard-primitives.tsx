@@ -12,7 +12,7 @@ export function Eyebrow({ children }: { children: ReactNode }) {
 }
 
 export function Panel({ children, className = '' }: { children: ReactNode; className?: string }) {
-  return <div className={`min-w-0 rounded-xl border border-mf-border bg-mf-surface ${className}`}>{children}</div>
+  return <div data-specular className={`min-w-0 rounded-xl border border-mf-border bg-mf-surface ${className}`}>{children}</div>
 }
 
 export function SectionHeading({ title, aside }: { title: string; aside?: ReactNode }) {
@@ -30,7 +30,7 @@ export function PanelSection({ title, aside, children }: {
   children: ReactNode
 }) {
   return (
-    <section aria-label={title} className="min-w-0 rounded-xl border border-mf-border bg-mf-surface p-4 lg:p-5">
+    <section data-specular aria-label={title} className="min-w-0 rounded-xl border border-mf-border bg-mf-surface p-4 lg:p-5">
       <SectionHeading title={title} aside={aside} />
       {children}
     </section>
@@ -51,7 +51,7 @@ export function Kpi({ label, value, note, tone = 'default', nested = false }: {
   const moneyParts = value.match(/^(.+?)(\s)([A-Z]{3})$/u)
 
   return (
-    <div data-direction-kpi={label}
+    <div data-specular data-direction-kpi={label}
       className={`flex min-h-[138px] min-w-0 flex-col justify-between rounded-xl border p-5 ${
         nested ? 'border-mf-border/60 bg-background/40' : 'border-mf-border bg-mf-surface'
       }`}>

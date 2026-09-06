@@ -6,6 +6,7 @@ import type { NavItem } from '@/lib/navigation'
 import { Header } from './header'
 import { Sidebar } from './sidebar'
 import { navigationBreadcrumb } from './navigation-groups'
+import { SpecularSurfaceProvider } from '@/components/specular/specular-surface-provider'
 
 // Geometrie du preview-shell canonique ; seuls les liens deja autorises arrivent ici.
 export function AppShell({ items, organizationName, userName, roleLabel, children }: {
@@ -39,6 +40,7 @@ export function AppShell({ items, organizationName, userName, roleLabel, childre
     onNavigate={() => setOpen(false)} onClose={() => setOpen(false)} />
 
   return (
+    <SpecularSurfaceProvider>
     <div data-mf-app className="flex min-h-[100dvh] bg-background text-foreground">
       <div className="sticky top-0 hidden h-[100dvh] shrink-0 lg:block">{sidebar}</div>
       {open && (
@@ -65,5 +67,6 @@ export function AppShell({ items, organizationName, userName, roleLabel, childre
         </main>
       </div>
     </div>
+    </SpecularSurfaceProvider>
   )
 }
